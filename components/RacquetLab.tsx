@@ -14,36 +14,34 @@ export default function RacquetLab() {
   const [hasOvergrip, setHasOvergrip] = useState(true);
   const [hasLeatherGrip, setHasLeatherGrip] = useState(false);
 
-  // Customization States (in grams)
   const [lead12, setLead12] = useState(0);
   const [lead39, setLead39] = useState(0);
   const [leadThroat, setLeadThroat] = useState(0);
   const [tailWeight, setTailWeight] = useState(0);
 
-  // Constants
   const OVERGRIP_WT = 6;
   const LEATHER_WT = 10;
 
-  // Distances from butt cap (cm)
   const DIST_12 = 68;
   const DIST_39 = 54;
   const DIST_THROAT = 33;
   const DIST_HANDLE = 7;
 
-  // --- PHYSICS ENGINE ---
+  const parseGramInput = (value: string): number => {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? Math.max(0, parsed) : 0;
+  };
+
   const overgripMass = hasOvergrip ? OVERGRIP_WT : 0;
   const leatherMass = hasLeatherGrip ? LEATHER_WT : 0;
 
   const totalAddedMass = overgripMass + leatherMass + lead12 + lead39 + leadThroat + tailWeight;
-  const finalWeight = selectedModel.baseWeight + totalAddedMass;
+  const finalWeight = Math.max(1, selectedModel.baseWeight + totalAddedMass);
 
-  // Balance Calculation: ((BaseWt * BaseBal) + Sum(AddedWt * Distance)) / FinalWt
   const baseMoment = selectedModel.baseWeight * selectedModel.baseBalance;
   const addedMoment = (lead12 * DIST_12) + (lead39 * DIST_39) + (leadThroat * DIST_THROAT) + ((overgripMass + leatherMass + tailWeight) * DIST_HANDLE);
   const finalBalance = (baseMoment + addedMoment) / finalWeight;
 
-  // Swingweight Calculation: BaseSW + Sum(AddedWt * (Distance - 10)^2 / 1000)
-  // Axis of rotation is 10cm from the butt cap
   const calcSWShift = (mass: number, dist: number) => mass * Math.pow(dist - 10, 2) / 1000;
 
   const swShift = calcSWShift(lead12, DIST_12) +
@@ -53,12 +51,10 @@ export default function RacquetLab() {
 
   const finalSW = selectedModel.baseSW + swShift;
 
-  // Balance Visualizer Math (Standard racket is 68.58cm. Even balance = ~34.29cm)
   const balancePercent = Math.max(0, Math.min(100, ((finalBalance - 30) / (35 - 30)) * 100));
 
   return (
-    <div className="flex flex-col lg:flex-row gap-8">
-      {/* Left Column: Visualizer */}
+    <div className="flex flex-col lg:flex-row gap-8 overflow-hidden">
       <div className="w-full lg:w-5/12 space-y-6">
         <h3 className="text-xl font-bold text-white">Frame Visualizer</h3>
         <RacquetVisualizer
@@ -69,16 +65,13 @@ export default function RacquetLab() {
           leadThroat={leadThroat}
         />
 
-        {/* Balance Scale UI */}
         <div className="bg-neutral-900 border border-neutral-800 p-6 rounded-xl">
           <div className="flex justify-between text-xs font-bold text-neutral-400 mb-2 uppercase tracking-wider">
             <span>Head Light (HL)</span>
             <span>Head Heavy (HH)</span>
           </div>
           <div className="relative h-2 bg-neutral-800 rounded-full w-full">
-            {/* 34.3cm Even Balance Marker */}
             <div className="absolute top-0 bottom-0 w-px bg-neutral-600 left-[85.8%] z-0" />
-            {/* Dynamic Balance Indicator */}
             <div
               className="absolute top-1/2 -translate-y-1/2 w-4 h-4 bg-lime-400 rounded-full shadow-[0_0_10px_rgba(163,230,53,0.5)] z-10 transition-all duration-500"
               style={{ left: `calc(${balancePercent}% - 8px)` }}
@@ -88,9 +81,7 @@ export default function RacquetLab() {
         </div>
       </div>
 
-      {/* Right Column: Controls & Analytics */}
       <div className="w-full lg:w-7/12 flex flex-col gap-6">
-        {/* Before & After Dashboard */}
         <div className="grid grid-cols-3 gap-4 bg-neutral-900 border border-neutral-800 p-6 rounded-xl">
           <div>
             <p className="text-sm text-neutral-400">Weight</p>
@@ -109,7 +100,6 @@ export default function RacquetLab() {
           </div>
         </div>
 
-        {/* Inputs */}
         <div className="bg-neutral-900 border border-neutral-800 p-6 rounded-xl space-y-6">
           <div>
             <label className="text-sm font-bold text-white">Base Frame</label>
@@ -142,22 +132,22 @@ export default function RacquetLab() {
 
             <div className="flex items-center justify-between">
               <label className="text-sm text-neutral-400">12 o'clock (Tip)</label>
-              <input type="number" min="0" value={lead12} onChange={(e) => setLead12(Number(e.target.value))} className="w-24 bg-neutral-950 border border-neutral-800 text-white p-2 rounded text-center" />
+              <input type="number" min="0" value={lead12} onChange={(e) => setLead12(parseGramInput(e.target.value))} className="w-24 bg-neutral-950 border border-neutral-800 text-white p-2 rounded text-center" />
             </div>
 
             <div className="flex items-center justify-between">
               <label className="text-sm text-neutral-400">3 & 9 o'clock (Sides)</label>
-              <input type="number" min="0" value={lead39} onChange={(e) => setLead39(Number(e.target.value))} className="w-24 bg-neutral-950 border border-neutral-800 text-white p-2 rounded text-center" />
+              <input type="number" min="0" value={lead39} onChange={(e) => setLead39(parseGramInput(e.target.value))} className="w-24 bg-neutral-950 border border-neutral-800 text-white p-2 rounded text-center" />
             </div>
 
             <div className="flex items-center justify-between">
               <label className="text-sm text-neutral-400">Throat Bridge</label>
-              <input type="number" min="0" value={leadThroat} onChange={(e) => setLeadThroat(Number(e.target.value))} className="w-24 bg-neutral-950 border border-neutral-800 text-white p-2 rounded text-center" />
+              <input type="number" min="0" value={leadThroat} onChange={(e) => setLeadThroat(parseGramInput(e.target.value))} className="w-24 bg-neutral-950 border border-neutral-800 text-white p-2 rounded text-center" />
             </div>
 
             <div className="flex items-center justify-between">
               <label className="text-sm text-neutral-400">Butt Cap (Silicone/Putty)</label>
-              <input type="number" min="0" value={tailWeight} onChange={(e) => setTailWeight(Number(e.target.value))} className="w-24 bg-neutral-950 border border-neutral-800 text-white p-2 rounded text-center" />
+              <input type="number" min="0" value={tailWeight} onChange={(e) => setTailWeight(parseGramInput(e.target.value))} className="w-24 bg-neutral-950 border border-neutral-800 text-white p-2 rounded text-center" />
             </div>
           </div>
         </div>
