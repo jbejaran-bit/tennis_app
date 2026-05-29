@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
 
 export default async function HomePage() {
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -48,20 +48,16 @@ export default async function HomePage() {
         <div className="inline-flex items-center gap-2 rounded-full border border-baseline-border bg-baseline-dark-3 px-4 py-1.5 mb-8">
           <div className="w-1.5 h-1.5 rounded-full bg-baseline-green animate-pulse-glow" />
           <span className="text-xs text-baseline-text-secondary font-mono">
-            AI-powered tennis performance tracking
+            Varsity-Grade Performance Diagnostics
           </span>
         </div>
 
-        <h1 className="font-display text-5xl md:text-7xl font-bold tracking-tight text-baseline-text-primary leading-[1.05] mb-6 max-w-3xl">
-          Your coach
-          <br />
-          <span className="text-baseline-green">knows every match.</span>
+        <h1 className="text-4xl md:text-6xl font-bold text-white tracking-tight">
+          Play the match. <span className="text-lime-400">We track the data.</span>
         </h1>
 
-        <p className="text-lg text-baseline-text-secondary max-w-xl mb-10 leading-relaxed">
-          Baseline tracks every match you play and builds a longitudinal dataset
-          of your performance. The more you log, the smarter your AI coach
-          becomes.
+        <p className="mt-4 text-lg text-neutral-400 max-w-xl">
+          Log your match stats and analyze your mechanics. Baseline turns your on-court performance into actionable, tactical insights to elevate your game.
         </p>
 
         <div className="flex items-center gap-4 flex-wrap justify-center">
@@ -82,12 +78,12 @@ export default async function HomePage() {
         {/* Feature pills */}
         <div className="mt-20 flex flex-wrap gap-3 justify-center max-w-2xl">
           {[
-            "AI post-match debrief",
-            "Pattern recognition",
-            "Surface analytics",
-            "Serve % trends",
-            "UTR tracking",
-            "Momentum scoring",
+            "Tactical Match Debriefs",
+            "Stroke Biomechanics",
+            "Surface-Specific Win Rates",
+            "Kinematic Serve Trends",
+            "Longitudinal UTR Tracking",
+            "Momentum Shift Analysis",
           ].map((f) => (
             <span
               key={f}

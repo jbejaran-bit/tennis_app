@@ -1,14 +1,29 @@
-// Mock Supabase client for Next.js Server Components (Node.js environment)
-export function createClient() {
-  return {
-    auth: {
-      async getUser() {
-        // Return null by default to render the landing page cleanly
-        return {
-          data: { user: null },
-          error: null
-        };
-      }
+import { createServerClient } from "@supabase/ssr";
+import { cookies } from "next/headers";
+
+export async function createClient() {
+  const cookieStore = await cookies();
+
+  return createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return cookieStore.getAll();
+        },
+        setAll(cookiesToSet) {
+          try {
+            cookiesToSet.forEach(({ name, value, options }) => {
+              cookieStore.set(name, value, options);
+            });
+          } catch (error) {
+            // The `setAll` method was called from a Server Component.
+            // This can be safely ignored as middleware or route handlers
+            // will handle the actual cookie setting.
+          }
+        },
+      },
     }
-  };
+  );
 }

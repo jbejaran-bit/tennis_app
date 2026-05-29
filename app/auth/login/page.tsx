@@ -37,15 +37,25 @@ function LoginForm() {
   }
 
   async function handleGoogleLogin() {
-    setLoading(true);
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo: `${window.location.origin}/auth/callback?next=${redirectTo}`,
-      },
-    });
-    if (error) {
-      setError(error.message);
+    try {
+      setLoading(true);
+      console.log("Starting Google Login...");
+
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: `${window.location.origin}/auth/callback`,
+        },
+      });
+
+      if (error) {
+        console.error("Supabase Error:", error.message);
+        setError(error.message);
+        setLoading(false);
+      }
+    } catch (err) {
+      console.error("Caught Exception:", err);
+      setError("Critical failure connecting to Google.");
       setLoading(false);
     }
   }
@@ -63,6 +73,7 @@ function LoginForm() {
 
       <div className="rounded-2xl border border-baseline-border bg-baseline-dark-3 p-6 shadow-xl">
         <button
+          type="button"
           onClick={handleGoogleLogin}
           disabled={loading}
           className="w-full flex items-center justify-center gap-3 rounded-lg border border-baseline-border bg-baseline-dark-4 px-4 py-2.5 text-sm font-medium text-baseline-text-primary hover:bg-baseline-dark-5 transition-colors disabled:opacity-50 mb-4"
