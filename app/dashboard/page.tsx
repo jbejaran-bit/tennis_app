@@ -32,6 +32,26 @@ type Lesson = {
   tacticalFocus: string[];
 };
 
+function getYouTubeEmbedUrl(url: string) {
+  try {
+    const parsedUrl = new URL(url);
+
+    if (parsedUrl.hostname.includes("youtube.com") && parsedUrl.pathname === "/watch") {
+      const videoId = parsedUrl.searchParams.get("v");
+      return videoId ? `https://www.youtube.com/embed/${videoId}` : url;
+    }
+
+    if (parsedUrl.hostname === "youtu.be") {
+      const videoId = parsedUrl.pathname.replace("/", "");
+      return videoId ? `https://www.youtube.com/embed/${videoId}` : url;
+    }
+
+    return url;
+  } catch {
+    return url;
+  }
+}
+
 function LessonsList() {
   const [activeLesson, setActiveLesson] = useState<Lesson | null>(null);
 
@@ -98,7 +118,7 @@ function LessonsList() {
             <div className="w-full md:w-3/5 aspect-video bg-black">
               <iframe
                 className="w-full h-full"
-                src={activeLesson.videoUrl}
+                src={getYouTubeEmbedUrl(activeLesson.videoUrl)}
                 title="Lesson Video"
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                 allowFullScreen
