@@ -443,7 +443,7 @@ export default function DashboardPage() {
         {activeTab === "matches" && (
           <section className="grid grid-cols-1 lg:grid-cols-12 gap-8">
             <div className="lg:col-span-8 flex flex-col gap-8">
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-4">
                 <div className="rounded-xl border border-baseline-border bg-baseline-dark-3/60 backdrop-blur-sm p-4 hover:border-baseline-green/20 transition-all">
                   <span className="text-xs text-baseline-text-dim uppercase tracking-wider font-mono">Win Rate</span>
                   <div className="flex items-baseline gap-1 mt-2">
