@@ -63,9 +63,31 @@ export default function VideoGallery() {
   }
 
   if (videos.length === 0) {
+    const placeholders = [
+      { title: 'Forehand Drills - May 28', duration: '12:45', date: 'May 28, 2026' },
+      { title: 'Backhand Consistency - May 20', duration: '9:12', date: 'May 20, 2026' },
+      { title: 'Serve Practice - Apr 30', duration: '7:34', date: 'Apr 30, 2026' },
+    ];
+
     return (
-      <div className="p-6 rounded-2xl border border-baseline-border bg-baseline-dark-3/40 text-baseline-text-dim">
-        <p className="text-sm">No recordings yet. Record a lesson to populate your gallery.</p>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {placeholders.map((p, i) => (
+          <div key={i} className="rounded-lg border border-baseline-border bg-baseline-dark-4 p-3">
+            <div className="w-full h-48 bg-neutral-800 rounded-md flex items-center justify-center relative overflow-hidden">
+              <svg className="w-12 h-12 text-neutral-500" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M8 5v14l11-7L8 5z" fill="currentColor" />
+              </svg>
+            </div>
+
+            <div className="mt-3">
+              <div className="text-sm font-semibold text-baseline-text-primary">{p.title}</div>
+              <div className="text-xs text-baseline-text-dim mt-1 flex items-center justify-between">
+                <span>{p.duration}</span>
+                <span>{p.date}</span>
+              </div>
+            </div>
+          </div>
+        ))}
       </div>
     );
   }

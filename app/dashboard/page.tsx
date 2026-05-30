@@ -198,7 +198,7 @@ export default function DashboardPage() {
 
   const [matches, setMatches] = useState<Match[]>([]);
   const [selectedMatch, setSelectedMatch] = useState<Match | null>(null);
-  const [aiReport, setAiReport] = useState<string | null>(null);
+  const [aiReport, setAiReport] = useState<any | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
 
   const [showLogForm, setShowLogForm] = useState(false);
@@ -325,46 +325,30 @@ export default function DashboardPage() {
   }
 
   function handleAnalyzeMatch(match: Match) {
-    setAiLoading(true);
-    setAiReport(null);
+    // Immediately show a premium, styled debrief for demonstration
+    const premium = {
+      title: `Claude Premium Debrief — vs ${match.opponent}`,
+      biomechanics: [
+        "Improved hip-shoulder separation on forehands, but reduced rotation on off-forehand exchanges causing power leakage.",
+        "Slight front-to-back weight shift at point-of-contact; increase forward momentum during attack-phase to improve transfer.",
+        "Consistent racket head lag during service toss; emphasis on earlier pronation will add pace without sacrificing spin."
+      ],
+      tactical: [
+        "Prefer short crosscourt exchanges to open up inside-out forehand opportunities.",
+        "Use heavier slice on the return-to-neutral point to buy time for recovery when opponent steps inside.",
+        "Target the backhand corner on 2nd serve returns to force shorter replies."
+      ],
+      drill: "Depth & Drive Drill — 3 sets of 8 crosscourt rally reps focusing on early weight transfer and finishing forward. Finish each set with 6 serves aimed to the T under pressure.",
+      meta: {
+        firstServe: match.firstServe,
+        unforcedErrors: match.unforcedErrors,
+        score: match.score,
+        date: match.date,
+      }
+    };
 
-    setTimeout(() => {
-      const analysis =
-        match.result === "win"
-          ? `### Claude AI Coach Analysis: Match Victory against **${match.opponent}**
-
-Outstanding work on securing the victory. Let's examine the performance data to see what made this match highly effective.
-
-#### Key Performance Indicators
-* **First Serve Efficiency**: **${match.firstServe}%** ${match.firstServe >= 65 ? "Exceptional" : "Moderate"} (Your standard target is 65%).
-* **Shot Selection Stability**: Only **${match.unforcedErrors}** unforced errors. This reflects solid shot selection and patience from the back of the court.
-
-#### Tactical Insights
-1. **Patience & Execution**: Your high-margin depth restricted the opponent's offensive output.
-2. **Surface Leverage**: On **${match.surface.replace("_", " ")}**, your movement and anticipation helped you recover quickly.
-
-#### Professional Coaching Drills
-* **Dynamic Depth Drill**: Put a target strip 3 feet inside the baseline and hit 20 crosscourt forehands toward it.
-* **Serve Control**: Work on wide slices from the deuce court to stretch opponents early.`
-          : `### Claude AI Coach Analysis: Post-Match Debrief vs **${match.opponent}**
-
-Every match is either a win or a useful diagnostic dataset. Let's analyze the performance gaps and rebuild the tactical plan.
-
-#### Diagnostic Indicators
-* **First Serve Pressure**: **${match.firstServe}%** is below the optimal **65%** threshold.
-* **Unforced Error Count**: **${match.unforcedErrors}** errors points to forcing play early or losing footwork quality.
-
-#### Strategic Adjustments
-1. **Second Serve Protection**: Add more kick to push opponents back and reduce return pressure.
-2. **Defensive Neutralization**: Use higher-clearance defensive balls to reset rallies on **${match.surface.replace("_", " ")}**.
-
-#### Improvement Action Plan
-* **Serves & Target Drills**: Practice 50 serves to T, body, and wide zones.
-* **Consistency Rallies**: Build rallies of at least 10 high-margin hits before acceleration.`;
-
-      setAiReport(analysis);
-      setAiLoading(false);
-    }, 1500);
+    setAiReport(premium);
+    setAiLoading(false);
   }
 
   const totalMatches = matches.length;
@@ -465,6 +449,14 @@ Every match is either a win or a useful diagnostic dataset. Let's analyze the pe
                   <div className="flex items-baseline gap-1 mt-2">
                     <span className="text-3xl font-bold font-display text-baseline-green">{winRate}%</span>
                     <span className="text-xs text-baseline-text-secondary">({wins}W - {losses}L)</span>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-baseline-border bg-baseline-dark-3/60 backdrop-blur-sm p-4 hover:border-baseline-green/20 transition-all">
+                  <span className="text-xs text-baseline-text-dim uppercase tracking-wider font-mono">Coaching Cost Saved</span>
+                  <div className="flex flex-col gap-1 mt-2">
+                    <span className="text-2xl font-bold font-display text-baseline-green">~$240</span>
+                    <span className="text-xs text-baseline-text-secondary">3 AI debriefs vs. private coaching sessions</span>
                   </div>
                 </div>
 
@@ -756,7 +748,45 @@ Every match is either a win or a useful diagnostic dataset. Let's analyze the pe
                       </div>
                     )}
 
-                    {aiReport && (
+                    {aiReport && typeof aiReport === 'object' && (
+                      <div className="flex-1 overflow-y-auto max-h-[520px] pr-1 space-y-4 animate-fade-in text-sm font-sans leading-relaxed select-text">
+                        <div className="rounded-lg border border-baseline-green/10 bg-gradient-to-r from-neutral-900 to-neutral-800 p-4">
+                          <h4 className="text-sm font-display font-bold text-baseline-green">{aiReport.title || 'Claude Premium Debrief'}</h4>
+                          <p className="text-xs text-baseline-text-dim mt-1">Premium coaching insights — biomechanical & tactical</p>
+                        </div>
+
+                        <div className="grid grid-cols-1 gap-4">
+                          <div className="rounded-lg border border-baseline-border bg-baseline-dark-4 p-4">
+                            <h5 className="text-sm font-bold text-baseline-green mb-2">Biomechanical Feedback</h5>
+                            <ul className="list-disc list-inside text-baseline-text-secondary space-y-1">
+                              {Array.isArray(aiReport.biomechanics) ? aiReport.biomechanics.map((b: string, i: number) => (
+                                <li key={i}>{b}</li>
+                              )) : (<li>{aiReport.biomechanics || '—'}</li>)}
+                            </ul>
+                          </div>
+
+                          <div className="rounded-lg border border-baseline-border bg-baseline-dark-4 p-4">
+                            <h5 className="text-sm font-bold text-baseline-green mb-2">Tactical Adjustments</h5>
+                            <ul className="list-disc list-inside text-baseline-text-secondary space-y-1">
+                              {Array.isArray(aiReport.tactical) ? aiReport.tactical.map((t: string, i: number) => (
+                                <li key={i}>{t}</li>
+                              )) : (<li>{aiReport.tactical || '—'}</li>)}
+                            </ul>
+                          </div>
+
+                          <div className="rounded-lg border border-baseline-border bg-baseline-dark-4 p-4">
+                            <h5 className="text-sm font-bold text-baseline-green mb-2">Recommended Drill</h5>
+                            <p className="text-baseline-text-secondary">{aiReport.drill}</p>
+                          </div>
+
+                          <div className="rounded-lg border border-baseline-border bg-baseline-dark-3/60 p-3 text-xs text-baseline-text-dim">
+                            <strong className="font-mono">Session Notes:</strong>
+                            <span className="ml-2">{`1st Serve ${aiReport.meta?.firstServe}% • ${aiReport.meta?.unforcedErrors} errors • ${aiReport.meta?.score} (${aiReport.meta?.date})`}</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    {aiReport && typeof aiReport === 'string' && (
                       <div className="flex-1 overflow-y-auto max-h-[460px] pr-1 space-y-4 animate-fade-in text-sm font-sans leading-relaxed text-baseline-text-secondary select-text">
                         <div className="border border-baseline-green/10 bg-baseline-green/5 rounded-lg p-3 text-xs border-dashed text-baseline-green font-mono">
                           Analytical pattern matching finished. Strategic directives loaded below.

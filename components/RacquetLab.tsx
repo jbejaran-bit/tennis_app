@@ -11,35 +11,38 @@ const MODELS = [
 
 export default function RacquetLab() {
   const [selectedModel, setSelectedModel] = useState(MODELS[0]);
-  const [hasOvergrip, setHasOvergrip] = useState(true);
+  const [overgrips, setOvergrips] = useState(1);
   const [hasLeatherGrip, setHasLeatherGrip] = useState(false);
 
   const [lead12, setLead12] = useState(0);
   const [lead39, setLead39] = useState(0);
   const [leadThroat, setLeadThroat] = useState(0);
   const [tailWeight, setTailWeight] = useState(0);
+  const [stringWeight, setStringWeight] = useState(0);
 
-  const OVERGRIP_WT = 6;
+  const OVERGRIP_PER = 5.5;
   const LEATHER_WT = 10;
 
   const DIST_12 = 68;
   const DIST_39 = 54;
   const DIST_THROAT = 33;
   const DIST_HANDLE = 7;
+  const DIST_STRINGS = 53;
+  const DIST_OVERGRIP = 10;
 
   const parseGramInput = (value: string): number => {
     const parsed = Number(value);
     return Number.isFinite(parsed) ? Math.max(0, parsed) : 0;
   };
 
-  const overgripMass = hasOvergrip ? OVERGRIP_WT : 0;
+  const overgripTotalWeight = overgrips * OVERGRIP_PER;
   const leatherMass = hasLeatherGrip ? LEATHER_WT : 0;
 
-  const totalAddedMass = overgripMass + leatherMass + lead12 + lead39 + leadThroat + tailWeight;
+  const totalAddedMass = overgripTotalWeight + leatherMass + lead12 + lead39 + leadThroat + tailWeight + stringWeight;
   const finalWeight = Math.max(1, selectedModel.baseWeight + totalAddedMass);
 
   const baseMoment = selectedModel.baseWeight * selectedModel.baseBalance;
-  const addedMoment = (lead12 * DIST_12) + (lead39 * DIST_39) + (leadThroat * DIST_THROAT) + ((overgripMass + leatherMass + tailWeight) * DIST_HANDLE);
+  const addedMoment = (lead12 * DIST_12) + (lead39 * DIST_39) + (leadThroat * DIST_THROAT) + ((leatherMass + tailWeight) * DIST_HANDLE) + (overgripTotalWeight * DIST_OVERGRIP) + (stringWeight * DIST_STRINGS);
   const finalBalance = (baseMoment + addedMoment) / finalWeight;
 
   const calcSWShift = (mass: number, dist: number) => mass * Math.pow(dist - 10, 2) / 1000;
@@ -47,7 +50,9 @@ export default function RacquetLab() {
   const swShift = calcSWShift(lead12, DIST_12) +
                   calcSWShift(lead39, DIST_39) +
                   calcSWShift(leadThroat, DIST_THROAT) +
-                  calcSWShift(overgripMass + leatherMass + tailWeight, DIST_HANDLE);
+                  calcSWShift(leatherMass + tailWeight, DIST_HANDLE) +
+                  calcSWShift(overgripTotalWeight, DIST_OVERGRIP) +
+                  calcSWShift(stringWeight, DIST_STRINGS);
 
   const finalSW = selectedModel.baseSW + swShift;
 
@@ -116,11 +121,16 @@ export default function RacquetLab() {
             </select>
           </div>
 
-          <div className="grid grid-cols-2 gap-4 border-t border-neutral-800 pt-6">
-            <label className="flex items-center space-x-3 cursor-pointer">
-              <input type="checkbox" checked={hasOvergrip} onChange={(e) => setHasOvergrip(e.target.checked)} className="w-5 h-5 rounded border-neutral-700 text-lime-400 bg-neutral-950" />
-              <span className="text-white text-sm">Overgrip (+6g)</span>
-            </label>
+          <div className="grid grid-cols-2 gap-4 border-t border-neutral-800 pt-6 items-center">
+            <div className="flex items-center gap-3">
+              <label className="text-white text-sm">Overgrips</label>
+              <select value={overgrips} onChange={(e) => setOvergrips(Number(e.target.value))} className="bg-neutral-950 border border-neutral-800 text-white p-2 rounded">
+                <option value={0}>0</option>
+                <option value={1}>1</option>
+                <option value={2}>2</option>
+              </select>
+              <span className="text-xs text-neutral-500">5.5g each</span>
+            </div>
             <label className="flex items-center space-x-3 cursor-pointer">
               <input type="checkbox" checked={hasLeatherGrip} onChange={(e) => setHasLeatherGrip(e.target.checked)} className="w-5 h-5 rounded border-neutral-700 text-lime-400 bg-neutral-950" />
               <span className="text-white text-sm">Leather Grip (+10g)</span>
@@ -132,22 +142,27 @@ export default function RacquetLab() {
 
             <div className="flex items-center justify-between">
               <label className="text-sm text-neutral-400">12 o'clock (Tip)</label>
-              <input type="number" min="0" value={lead12} onChange={(e) => setLead12(parseGramInput(e.target.value))} className="w-24 bg-neutral-950 border border-neutral-800 text-white p-2 rounded text-center" />
+              <input type="number" min="0" step="0.5" value={lead12} onChange={(e) => setLead12(parseGramInput(e.target.value))} className="w-24 bg-neutral-950 border border-neutral-800 text-white p-2 rounded text-center" />
             </div>
 
             <div className="flex items-center justify-between">
               <label className="text-sm text-neutral-400">3 & 9 o'clock (Sides)</label>
-              <input type="number" min="0" value={lead39} onChange={(e) => setLead39(parseGramInput(e.target.value))} className="w-24 bg-neutral-950 border border-neutral-800 text-white p-2 rounded text-center" />
+              <input type="number" min="0" step="0.5" value={lead39} onChange={(e) => setLead39(parseGramInput(e.target.value))} className="w-24 bg-neutral-950 border border-neutral-800 text-white p-2 rounded text-center" />
             </div>
 
             <div className="flex items-center justify-between">
               <label className="text-sm text-neutral-400">Throat Bridge</label>
-              <input type="number" min="0" value={leadThroat} onChange={(e) => setLeadThroat(parseGramInput(e.target.value))} className="w-24 bg-neutral-950 border border-neutral-800 text-white p-2 rounded text-center" />
+              <input type="number" min="0" step="0.5" value={leadThroat} onChange={(e) => setLeadThroat(parseGramInput(e.target.value))} className="w-24 bg-neutral-950 border border-neutral-800 text-white p-2 rounded text-center" />
             </div>
 
             <div className="flex items-center justify-between">
               <label className="text-sm text-neutral-400">Butt Cap (Silicone/Putty)</label>
-              <input type="number" min="0" value={tailWeight} onChange={(e) => setTailWeight(parseGramInput(e.target.value))} className="w-24 bg-neutral-950 border border-neutral-800 text-white p-2 rounded text-center" />
+              <input type="number" min="0" step="0.5" value={tailWeight} onChange={(e) => setTailWeight(parseGramInput(e.target.value))} className="w-24 bg-neutral-950 border border-neutral-800 text-white p-2 rounded text-center" />
+            </div>
+            
+            <div className="flex items-center justify-between">
+              <label className="text-sm text-neutral-400">String Weight</label>
+              <input type="number" min="0" step="0.5" value={stringWeight} onChange={(e) => setStringWeight(parseGramInput(e.target.value))} className="w-24 bg-neutral-950 border border-neutral-800 text-white p-2 rounded text-center" />
             </div>
           </div>
         </div>
