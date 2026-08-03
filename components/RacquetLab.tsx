@@ -4,9 +4,26 @@ import { useState } from "react";
 import RacquetVisualizer from "./RacquetVisualizer";
 
 const MODELS = [
-  { name: "Pure Aero 98", color: "#eab308", baseWeight: 305, baseBalance: 31.5, baseSW: 320 },
-  { name: "Pure Drive", color: "#3b82f6", baseWeight: 300, baseBalance: 32.0, baseSW: 320 },
-  { name: "Pro Staff 97", color: "#ef4444", baseWeight: 315, baseBalance: 31.0, baseSW: 320 },
+  { name: "Wilson Blade 98 (16x19 v9)", color: "#16a34a", baseWeight: 305, baseBalance: 32.0, baseSW: 320 },
+  { name: "Wilson Blade 98 (18x20 v9)", color: "#15803d", baseWeight: 305, baseBalance: 32.0, baseSW: 325 },
+  { name: "Babolat Pure Aero 98", color: "#eab308", baseWeight: 305, baseBalance: 31.5, baseSW: 320 },
+  { name: "Babolat Pure Aero", color: "#facc15", baseWeight: 300, baseBalance: 32.0, baseSW: 322 },
+  { name: "Yonex EZONE 98", color: "#2563eb", baseWeight: 305, baseBalance: 31.5, baseSW: 318 },
+  { name: "Yonex EZONE 100", color: "#3b82f6", baseWeight: 300, baseBalance: 32.0, baseSW: 315 },
+  { name: "Head Speed MP", color: "#ffffff", baseWeight: 300, baseBalance: 32.0, baseSW: 320 },
+  { name: "Head Speed Pro", color: "#000000", baseWeight: 310, baseBalance: 31.5, baseSW: 326 },
+  { name: "Babolat Pure Drive", color: "#1d4ed8", baseWeight: 300, baseBalance: 32.0, baseSW: 320 },
+  { name: "Yonex VCORE 98", color: "#dc2626", baseWeight: 305, baseBalance: 32.0, baseSW: 325 },
+  { name: "Yonex VCORE 100", color: "#ef4444", baseWeight: 300, baseBalance: 32.0, baseSW: 321 },
+  { name: "Babolat Pure Strike 98 (16x19)", color: "#ea580c", baseWeight: 305, baseBalance: 32.0, baseSW: 324 },
+  { name: "Wilson Pro Staff 97 v14", color: "#991b1b", baseWeight: 315, baseBalance: 31.0, baseSW: 321 },
+  { name: "Head Radical MP", color: "#f97316", baseWeight: 300, baseBalance: 32.0, baseSW: 320 },
+  { name: "Head Extreme MP", color: "#a3e635", baseWeight: 300, baseBalance: 32.0, baseSW: 318 },
+  { name: "Head Gravity MP", color: "#06b6d4", baseWeight: 295, baseBalance: 32.5, baseSW: 319 },
+  { name: "Head Gravity Pro", color: "#0891b2", baseWeight: 315, baseBalance: 31.5, baseSW: 332 },
+  { name: "Tecnifibre TFight ISO 305", color: "#38bdf8", baseWeight: 305, baseBalance: 32.5, baseSW: 333 },
+  { name: "Yonex Percept 97", color: "#0f766e", baseWeight: 310, baseBalance: 31.0, baseSW: 316 },
+  { name: "Wilson Shift 99 (300g)", color: "#94a3b8", baseWeight: 300, baseBalance: 31.5, baseSW: 317 },
 ];
 
 export default function RacquetLab() {
