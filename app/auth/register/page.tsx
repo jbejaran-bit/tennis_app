@@ -11,31 +11,39 @@ function RegisterForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [confirmation, setConfirmation] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const supabase = createClient();
 
   async function handleRegister(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
     setError(null);
 
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          full_name: name,
-        }
+    try {
+      const { data, error } = await createClient().auth.signUp({
+        email,
+        password,
+        options: {
+          data: { full_name: name },
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
+        },
+      });
+      if (error) {
+        setError(error.message);
+        return;
       }
-    });
-
-    if (error) {
-      setError(error.message);
-      setLoading(false);
-    } else {
+      if (!data.session) {
+        setConfirmation(true);
+        return;
+      }
       router.push("/dashboard");
       router.refresh();
+    } catch {
+      setError(
+        "Could not connect to sign-up. Try again, or use the local workspace.",
+      );
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -44,7 +52,7 @@ function RegisterForm() {
       setLoading(true);
       console.log("Starting Google Login...");
 
-      const { error } = await supabase.auth.signInWithOAuth({
+      const { error } = await createClient().auth.signInWithOAuth({
         provider: "google",
         options: {
           redirectTo: `${window.location.origin}/auth/callback`,
@@ -65,6 +73,12 @@ function RegisterForm() {
 
   return (
     <div className="w-full max-w-sm animate-fade-in">
+      <Link
+        href="/dashboard"
+        className="block text-center text-baseline-green text-sm mb-5"
+      >
+        Continue without an account →
+      </Link>
       <div className="text-center mb-8">
         <h1 className="font-display text-3xl font-bold text-baseline-text-primary mb-2">
           Create account
@@ -154,6 +168,12 @@ function RegisterForm() {
             />
           </div>
 
+          {confirmation && (
+            <p role="status" className="text-sm text-baseline-green">
+              Check your email to confirm your account. You can use the local
+              workspace while you wait.
+            </p>
+          )}
           {error && (
             <p className="text-xs text-red-400 bg-red-500/10 rounded-lg px-3 py-2 border border-red-500/20">
               {error}
@@ -185,12 +205,16 @@ function RegisterForm() {
 
 export default function RegisterPage() {
   return (
-    <Suspense fallback={
-      <div className="w-full max-w-sm text-center py-12">
-        <div className="inline-block w-6 h-6 border-2 border-baseline-green border-t-transparent rounded-full animate-spin"></div>
-        <p className="mt-4 text-sm text-baseline-text-secondary font-mono">Setting up your profile...</p>
-      </div>
-    }>
+    <Suspense
+      fallback={
+        <div className="w-full max-w-sm text-center py-12">
+          <div className="inline-block w-6 h-6 border-2 border-baseline-green border-t-transparent rounded-full animate-spin"></div>
+          <p className="mt-4 text-sm text-baseline-text-secondary font-mono">
+            Setting up your profile...
+          </p>
+        </div>
+      }
+    >
       <RegisterForm />
     </Suspense>
   );

@@ -104,3 +104,61 @@ test("Numeric validation accepts real zero and rejects impossible stats", () => 
   assert.ok(!isMatch({ ...m, firstServe: 101 }));
   assert.ok(!isMatch({ ...m, unforcedErrors: -1 }));
 });
+const { readStored, updateStored, mergeById } = load("lib/baseline/storage.ts");
+const validList = (v) =>
+  Array.isArray(v) && v.every((x) => x && typeof x.id === "string");
+function memoryStore() {
+  const data = new Map();
+  return {
+    getItem: (k) => data.get(k) ?? null,
+    setItem: (k, v) => data.set(k, v),
+  };
+}
+test("Writes use the latest persisted list, retaining another tab’s additions", () => {
+  const store = memoryStore();
+  updateStored(store, "items", [], validList, () => [{ id: "a" }]);
+  updateStored(store, "items", [], validList, (current) => [
+    ...current,
+    { id: "b" },
+  ]);
+  assert.deepEqual(readStored(store, "items", [], validList), [
+    { id: "a" },
+    { id: "b" },
+  ]);
+});
+test("Invalid existing data is never overwritten by a new save", () => {
+  const store = memoryStore();
+  store.setItem("items", "broken JSON");
+  assert.throws(() =>
+    updateStored(store, "items", [], validList, [{ id: "new" }]),
+  );
+  assert.equal(store.getItem("items"), "broken JSON");
+});
+test("Backup merge keeps existing IDs and deduplicates incoming entries", () => {
+  assert.deepEqual(
+    mergeById(
+      [{ id: "a", n: 1 }],
+      [
+        { id: "a", n: 2 },
+        { id: "b", n: 3 },
+        { id: "b", n: 4 },
+      ],
+    ),
+    [
+      { id: "a", n: 1 },
+      { id: "b", n: 3 },
+    ],
+  );
+});
+test("Malformed backup text fields, dates, and inherited surface names are rejected", () => {
+  assert.ok(!isMatch({ ...m, notes: { value: "bad" } }));
+  assert.ok(!isMatch({ ...m, surface: "toString" }));
+  assert.ok(!isMatch({ ...m, date: "2026-02-30" }));
+  assert.ok(!isMatch({ ...m, firstServe: undefined }));
+});
+test("Racket imported numbers cannot be strings and grip counts are integral", () => {
+  assert.ok(!isSetup({ ...newSetup(), baseWeight: "305" }));
+  assert.ok(!isSetup({ ...newSetup(), overgrips: 1.5 }));
+  assert.ok(!isSetup({ ...newSetup(), overgrips: 6 }));
+  assert.ok(!isSetup({ ...newSetup(), strings: 41 }));
+});

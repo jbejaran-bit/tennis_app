@@ -172,6 +172,13 @@ export function isSetup(value: unknown): value is Setup {
       (k) => typeof s[k] === "string",
     ) &&
     ["unstrung", "ready"].includes(s.condition) &&
+    Number.isFinite(s.baseWeight) &&
+    Number.isFinite(s.length) &&
+    Number.isFinite(s.baseBalance) &&
+    Number.isInteger(s.overgrips) &&
+    s.overgrips <= 5 &&
+    s.strings <= 40 &&
+    /^#[0-9a-f]{6}$/i.test(s.color) &&
     s.baseWeight >= 100 &&
     s.baseWeight <= 600 &&
     s.length >= 50 &&

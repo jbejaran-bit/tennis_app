@@ -11,6 +11,7 @@ import {
   Match,
   PracticeSession,
   isMatch,
+  validDate,
   matchSummary,
   isLegacyDemo,
   today,
@@ -19,6 +20,7 @@ import {
   downloadJson,
 } from "@/lib/baseline/data";
 import { Setup, isSetup, calculateSetup } from "@/lib/baseline/racquet";
+import { mergeById, readStored } from "@/lib/baseline/storage";
 import { createClient } from "@/lib/supabase/client";
 import "./workspace.css";
 type Tab =
@@ -70,7 +72,7 @@ const validSessions = (v: unknown): v is PracticeSession[] =>
       s &&
       typeof s.id === "string" &&
       drills.some((d) => d.id === s.drillId) &&
-      /^\d{4}-\d{2}-\d{2}$/.test(s.date) &&
+      validDate(s.date) &&
       Number.isFinite(s.minutes) &&
       s.minutes >= 1 &&
       s.minutes <= 300 &&
@@ -168,14 +170,6 @@ export default function DashboardPage() {
     setActive(id);
     window.history.replaceState(null, "", `#${id}`);
     setNotice("");
-    if (id === "overview") {
-      try {
-        const raw = JSON.parse(
-          localStorage.getItem("baseline_setups_v2") || "[]",
-        );
-        if (validSetups(raw)) setups.save(raw);
-      } catch {}
-    }
   };
   const practice = (id: string) => {
     setInitialDrill(id);
@@ -195,10 +189,13 @@ export default function DashboardPage() {
       setNotice("Check the match details before saving.");
       return;
     }
-    const next = matches.value.some((x) => x.id === m.id)
-      ? matches.value.map((x) => (x.id === m.id ? m : x))
-      : [m, ...matches.value];
-    if (matches.save(next)) {
+    if (
+      matches.save((current) =>
+        current.some((x) => x.id === m.id)
+          ? current.map((x) => (x.id === m.id ? m : x))
+          : [m, ...current],
+      )
+    ) {
       setForm(null);
       navigate("matches");
       setNotice("Match saved on this device.");
@@ -208,9 +205,14 @@ export default function DashboardPage() {
     try {
       downloadJson(`baseline-backup-${today()}.json`, {
         version: 2,
-        matches: matches.value,
-        practice: sessions.value,
-        setups: JSON.parse(localStorage.getItem("baseline_setups_v2") || "[]"),
+        matches: readStored(localStorage, "baseline_matches", [], validMatches),
+        practice: readStored(
+          localStorage,
+          "baseline_practice_v2",
+          [],
+          validSessions,
+        ),
+        setups: readStored(localStorage, "baseline_setups_v2", [], validSetups),
       });
       setNotice(
         "Backup exported. Download video clips separately from the video journal.",
@@ -232,23 +234,9 @@ export default function DashboardPage() {
         !validSetups(data.setups)
       )
         throw new Error();
-      const merge = <T extends { id: string }>(old: T[], incoming: T[]) => [
-        ...old,
-        ...incoming.filter((v) => !old.some((x) => x.id === v.id)),
-      ];
-      const currentSetups = JSON.parse(
-        localStorage.getItem("baseline_setups_v2") || "[]",
-      );
-      if (
-        !validSetups(currentSetups) ||
-        matches.error ||
-        sessions.error ||
-        setups.error
-      )
-        throw new Error();
-      const a = matches.save(merge(matches.value, data.matches));
-      const b = sessions.save(merge(sessions.value, data.practice));
-      const c = setups.save(merge(currentSetups, data.setups));
+      const a = matches.save((current) => mergeById(current, data.matches));
+      const b = sessions.save((current) => mergeById(current, data.practice));
+      const c = setups.save((current) => mergeById(current, data.setups));
       setNotice(
         a && b && c
           ? "Backup imported. Existing entries with the same ID were kept."

@@ -9,7 +9,7 @@ npm ci
 npm run dev
 ```
 
-The dashboard and landing page work without an account. For the existing Supabase sign-in and cloud recordings, configure `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` in `.env.local`. Those values are also required to prerender the existing auth pages during `npm run build`. Never commit secrets.
+The dashboard and landing page work without an account. For the existing Supabase sign-in and cloud recordings, configure `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` in `.env.local`. The app builds without these values; authentication requires a configured Supabase project. Never commit secrets.
 
 ## What works
 

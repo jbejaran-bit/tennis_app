@@ -76,10 +76,12 @@ export default function RacquetLab() {
       id: setup.id || crypto.randomUUID(),
       name: setup.name.trim(),
     };
-    const next = saved.value.some((s) => s.id === item.id)
-      ? saved.value.map((s) => (s.id === item.id ? item : s))
-      : [...saved.value, item];
-    if (saved.save(next)) {
+    if (
+      saved.save((current) => [
+        ...current.filter((s) => s.id !== item.id),
+        item,
+      ])
+    ) {
       setSetup(item);
       setMessage("Setup saved on this device.");
     }

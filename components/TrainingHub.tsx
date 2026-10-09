@@ -7,6 +7,7 @@ import {
   today,
   dateLabel,
 } from "@/lib/baseline/data";
+import { SaveLocal } from "@/lib/baseline/useLocalData";
 import Modal from "./Modal";
 import Icon from "./Icons";
 export function LessonsHub({
@@ -73,7 +74,7 @@ export default function TrainingHub({
   initialDrill,
 }: {
   sessions: PracticeSession[];
-  saveSessions: (v: PracticeSession[]) => boolean;
+  saveSessions: SaveLocal<PracticeSession[]>;
   initialDrill?: string;
 }) {
   const [filter, setFilter] = useState("All");
@@ -88,7 +89,7 @@ export default function TrainingHub({
     if (!drill || !Number.isFinite(minutes) || minutes < 1 || minutes > 300)
       return;
     if (
-      saveSessions([
+      saveSessions((current) => [
         {
           id: crypto.randomUUID(),
           drillId: drill.id,
@@ -96,7 +97,7 @@ export default function TrainingHub({
           minutes,
           notes: String(f.get("notes")),
         },
-        ...sessions,
+        ...current,
       ])
     ) {
       setLog(false);
