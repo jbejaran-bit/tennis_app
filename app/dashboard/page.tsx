@@ -1,901 +1,639 @@
 "use client";
-
-import { FormEvent, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
-import StrokeRecorder from "@/components/StrokeRecorder";
-import VideoGallery from "@/components/VideoGallery";
+import { ChangeEvent, useEffect, useState } from "react";
+import Link from "next/link";
+import Icon, { IconName } from "@/components/Icons";
 import RacquetLab from "@/components/RacquetLab";
-import AIDebrief from "@/components/AIDebrief";
-
-type TabType = "matches" | "lessons" | "exercises" | "gallery" | "racquet-lab";
-
-interface Match {
-  id: string;
-  opponent: string;
-  score: string;
-  surface: "hard" | "clay" | "grass" | "carpet" | "indoor_hard";
-  style: string;
-  firstServe: number;
-  unforcedErrors: number;
-  result: "win" | "loss";
-  date: string;
-  notes?: string;
-}
-
-type Lesson = {
-  id: string;
-  title: string;
-  level: string;
-  videoUrl: string;
-  description: string;
-  tacticalFocus: string[];
-};
-
-function getYouTubeEmbedUrl(url: string) {
-  try {
-    const parsedUrl = new URL(url);
-
-    if (parsedUrl.hostname.includes("youtube.com") && parsedUrl.pathname === "/watch") {
-      const videoId = parsedUrl.searchParams.get("v");
-      return videoId ? `https://www.youtube.com/embed/${videoId}` : url;
-    }
-
-    if (parsedUrl.hostname === "youtu.be") {
-      const videoId = parsedUrl.pathname.replace("/", "");
-      return videoId ? `https://www.youtube.com/embed/${videoId}` : url;
-    }
-
-    return url;
-  } catch {
-    return url;
-  }
-}
-
-function LessonsList() {
-  const [activeLesson, setActiveLesson] = useState<Lesson | null>(null);
-
-  const lessons: Lesson[] = [
-    {
-      id: "l1",
-      title: "Intro to Footwork",
-      level: "Beginner",
-      videoUrl: "https://www.youtube.com/embed/PX6n7jvbCj0",
-      description: "Master the split step and explosive first movement. This biomechanical breakdown focuses on loading the outside leg for optimal power transfer on the run.",
-      tacticalFocus: ["Split step timing", "Unit turn initiation", "Recovery steps"],
-    },
-    {
-      id: "l2",
-      title: "Approach Shot Mechanics",
-      level: "Intermediate",
-      videoUrl: "https://www.youtube.com/embed/0ZyBhUKTDmY",
-      description: "Build a cleaner transition pattern by pairing compact preparation with forward momentum through the contact zone.",
-      tacticalFocus: ["Short-ball recognition", "Contact in front", "Net closing path"],
-    },
-    {
-      id: "l3",
-      title: "Aggressive Baseline Patterns",
-      level: "Advanced",
-      videoUrl: "https://www.youtube.com/embed/ZZS1xFyUyf0",
-      description: "Learn how to use height, depth, and court position to create attackable balls without forcing low-percentage winners.",
-      tacticalFocus: ["Crosscourt pressure", "Inside-out forehand setup", "Recovery positioning"],
-    },
-    {
-      id: "l4",
-      title: "Pro Serve Placement",
-      level: "Pro",
-      videoUrl: "https://www.youtube.com/embed/T_5osrG-fGI",
-      description: "Refine serve targets by connecting toss consistency, shoulder rotation, and tactical intent before the first ball.",
-      tacticalFocus: ["T serve pattern", "Body serve jam", "Wide serve plus one"],
-    },
-  ];
-
+import TrainingHub, { LessonsHub } from "@/components/TrainingHub";
+import MatchHub, { MatchForm } from "@/components/MatchHub";
+import VideoGallery from "@/components/VideoGallery";
+import { useLocalData } from "@/lib/baseline/useLocalData";
+import {
+  Match,
+  PracticeSession,
+  isMatch,
+  validDate,
+  matchSummary,
+  isLegacyDemo,
+  today,
+  dateLabel,
+  drills,
+  downloadJson,
+} from "@/lib/baseline/data";
+import { Setup, isSetup, calculateSetup } from "@/lib/baseline/racquet";
+import { mergeById, readStored } from "@/lib/baseline/storage";
+import { createClient } from "@/lib/supabase/client";
+import "./workspace.css";
+type Tab =
+  "overview" | "racquet-lab" | "matches" | "training" | "lessons" | "gallery";
+const tabs: { id: Tab; name: string; icon: IconName; description: string }[] = [
+  {
+    id: "overview",
+    name: "Overview",
+    icon: "overview",
+    description: "A little intention. A better next session.",
+  },
+  {
+    id: "racquet-lab",
+    name: "Racket Lab",
+    icon: "racket",
+    description: "Find your feel. Build, save and compare your setups.",
+  },
+  {
+    id: "matches",
+    name: "Match log",
+    icon: "matches",
+    description: "Remember the patterns. Take something into your next match.",
+  },
+  {
+    id: "training",
+    name: "Training",
+    icon: "training",
+    description: "A clear target for every session.",
+  },
+  {
+    id: "lessons",
+    name: "Playbook",
+    icon: "lessons",
+    description: "Simple patterns you can take straight onto court.",
+  },
+  {
+    id: "gallery",
+    name: "Video journal",
+    icon: "video",
+    description: "Watch your game with a purpose.",
+  },
+];
+const validMatches = (v: unknown): v is Match[] =>
+  Array.isArray(v) && v.every(isMatch);
+const validSessions = (v: unknown): v is PracticeSession[] =>
+  Array.isArray(v) &&
+  v.every(
+    (s) =>
+      s &&
+      typeof s.id === "string" &&
+      drills.some((d) => d.id === s.drillId) &&
+      validDate(s.date) &&
+      Number.isFinite(s.minutes) &&
+      s.minutes >= 1 &&
+      s.minutes <= 300 &&
+      typeof s.notes === "string",
+  );
+const validSetups = (v: unknown): v is Setup[] =>
+  Array.isArray(v) && v.every(isSetup);
+function CourtArt() {
   return (
-    <div className="space-y-8">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {lessons.map((lesson) => (
-          <div key={lesson.id} className="rounded-lg border border-baseline-border p-4 bg-baseline-dark-4">
-            <h3 className="font-semibold">{lesson.title}</h3>
-            <p className="text-xs text-baseline-text-dim mt-1">Level: {lesson.level}</p>
-            <button
-              onClick={() => setActiveLesson(lesson)}
-              className="mt-3 inline-flex items-center gap-2 rounded bg-baseline-green px-3 py-1 text-xs font-semibold text-baseline-dark hover:bg-lime-300"
-            >
-              Open Lesson
-            </button>
-
-            <div className="mt-4">
-              <div className="text-xs text-baseline-text-dim mb-2">Practice Recorder</div>
-              <StrokeRecorder lessonTitle={lesson.title} />
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {activeLesson && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm p-4">
-          <div className="bg-neutral-950 border border-neutral-800 rounded-2xl w-full max-w-5xl overflow-hidden flex flex-col md:flex-row shadow-2xl">
-            <div className="w-full md:w-3/5 aspect-video bg-black">
-              <iframe
-                className="w-full h-full"
-                src={getYouTubeEmbedUrl(activeLesson.videoUrl)}
-                title="Lesson Video"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                allowFullScreen
-              />
-            </div>
-
-            <div className="w-full md:w-2/5 p-8 flex flex-col">
-              <div className="flex-grow">
-                <h2 className="text-2xl font-bold text-white mb-2">{activeLesson.title}</h2>
-                <div className="inline-block bg-neutral-800 text-neutral-300 px-2 py-1 rounded text-xs uppercase tracking-wider mb-6">
-                  {activeLesson.level}
-                </div>
-
-                <h4 className="text-lime-400 font-bold mb-2">Biomechanical Breakdown</h4>
-                <p className="text-neutral-400 text-sm leading-relaxed mb-6">{activeLesson.description}</p>
-
-                <h4 className="text-lime-400 font-bold mb-2">Tactical Focus</h4>
-                <ul className="list-disc list-inside text-neutral-400 text-sm space-y-1">
-                  {activeLesson.tacticalFocus.map((focus, i) => (
-                    <li key={i}>{focus}</li>
-                  ))}
-                </ul>
-              </div>
-
-              <button
-                onClick={() => setActiveLesson(null)}
-                className="mt-8 w-full border border-neutral-700 text-white px-4 py-3 rounded-lg font-bold hover:bg-neutral-800 transition"
-              >
-                Close Lesson
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+    <svg viewBox="0 0 470 280" className="hero-court" aria-hidden="true">
+      <defs>
+        <linearGradient id="court-fill" x1="0" x2="1" y1="0" y2="1">
+          <stop stopColor="#35472a" />
+          <stop offset="1" stopColor="#1a291d" />
+        </linearGradient>
+      </defs>
+      <g transform="translate(35 24) rotate(-12 200 120)">
+        <rect width="400" height="230" rx="10" fill="url(#court-fill)" />
+        <g stroke="#d2e0bf" strokeOpacity=".44" strokeWidth="1.4" fill="none">
+          <path d="M28 24h344v182H28zM28 48h344M28 182h344M200 24v182M96 48v134m208-134v134M96 115h208" />
+          <path d="M200 16v198" strokeWidth="3" />
+        </g>
+        <path
+          d="M78 156Q110 27 321 83"
+          fill="none"
+          stroke="#d0f777"
+          strokeWidth="2"
+          strokeDasharray="5 7"
+        />
+        <circle cx="78" cy="156" r="6" fill="#c8f15e" />
+        <circle cx="321" cy="83" r="9" fill="#c8f15e" />
+        <path
+          d="M315 77q10 2 11 12"
+          stroke="#273819"
+          fill="none"
+          strokeWidth="1.5"
+        />
+      </g>
+    </svg>
+  );
+}
+function Stat({
+  label,
+  value,
+  note,
+}: {
+  label: string;
+  value: string;
+  note: string;
+}) {
+  return (
+    <div className="stat-tile">
+      <span>{label}</span>
+      <strong>{value}</strong>
+      <small>{note}</small>
     </div>
   );
 }
-
-function ExercisesHub() {
-  const exercises = [
-    {
-      title: "Serve Target Ladder",
-      description: "Hit five serves each to T, body, and wide targets before moving up a target zone.",
-      focus: "Serve accuracy",
-    },
-    {
-      title: "10-Ball Baseline Challenge",
-      description: "Build rallies of 10 high-margin balls before changing direction or accelerating.",
-      focus: "Consistency",
-    },
-    {
-      title: "Approach and Recover",
-      description: "Attack a short ball, close the net, then recover for the next feed.",
-      focus: "Transition play",
-    },
-  ];
-
-  return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-      {exercises.map((exercise) => (
-        <article key={exercise.title} className="rounded-xl border border-baseline-border bg-baseline-dark-3 p-5">
-          <span className="text-[10px] uppercase font-mono text-baseline-green">{exercise.focus}</span>
-          <h3 className="mt-2 font-display text-lg font-bold text-baseline-text-primary">{exercise.title}</h3>
-          <p className="mt-3 text-sm text-baseline-text-secondary">{exercise.description}</p>
-        </article>
-      ))}
-    </div>
-  );
-}
-
 export default function DashboardPage() {
-  const router = useRouter();
-  const supabase = createClient();
-  const [user, setUser] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<TabType>("matches");
-
-  const [matches, setMatches] = useState<Match[]>([]);
-  const [selectedMatch, setSelectedMatch] = useState<Match | null>(null);
-  const [aiReport, setAiReport] = useState<any | null>(null);
-  const [aiLoading, setAiLoading] = useState(false);
-
-  const [showLogForm, setShowLogForm] = useState(false);
-  const [opponent, setOpponent] = useState("");
-  const [score, setScore] = useState("");
-  const [surface, setSurface] = useState<Match["surface"]>("hard");
-  const [style, setStyle] = useState("All-Court");
-  const [firstServe, setFirstServe] = useState(60);
-  const [unforcedErrors, setUnforcedErrors] = useState(20);
-  const [result, setResult] = useState<"win" | "loss">("win");
-  const [notes, setNotes] = useState("");
-
-  const seedMatches: Match[] = [
-    {
-      id: "1",
-      opponent: "Jannik Sinner",
-      score: "3-6, 4-6",
-      surface: "indoor_hard",
-      style: "Aggressive Baseliner",
-      firstServe: 55,
-      unforcedErrors: 34,
-      result: "loss",
-      date: "2026-05-18",
-      notes: "Sinner played highly aggressive from the baseline. My first serve rate was too low, giving away too many easy break points.",
-    },
-    {
-      id: "2",
-      opponent: "Novak Djokovic",
-      score: "7-6 (5), 6-4",
-      surface: "hard",
-      style: "Counterpuncher",
-      firstServe: 70,
-      unforcedErrors: 18,
-      result: "win",
-      date: "2026-05-15",
-      notes: "Extremely clean match. Maintained high patience during long rallies. Serve percentage was strong and unforced errors were minimized.",
-    },
-    {
-      id: "3",
-      opponent: "Carlos Alcaraz",
-      score: "6-4, 3-6, 7-5",
-      surface: "clay",
-      style: "All-Court",
-      firstServe: 62,
-      unforcedErrors: 28,
-      result: "win",
-      date: "2026-05-10",
-      notes: "Epic physical battle. Recovered from 2-4 down in the third set. Drop shots were effective on the clay.",
-    },
-  ];
-
+  const [active, setActive] = useState<Tab>("overview");
+  const [email, setEmail] = useState("");
+  const [form, setForm] = useState<Match | "new" | null>(null);
+  const [initialDrill, setInitialDrill] = useState("");
+  const [notice, setNotice] = useState("");
+  const matches = useLocalData<Match[]>("baseline_matches", [], validMatches);
+  const sessions = useLocalData<PracticeSession[]>(
+    "baseline_practice_v2",
+    [],
+    validSessions,
+  );
+  const setups = useLocalData<Setup[]>("baseline_setups_v2", [], validSetups);
   useEffect(() => {
-    async function checkUser() {
-      const { data } = await supabase.auth.getUser();
-      if (!data.user) {
-        setUser({
-          id: "guest-user-id",
-          email: "tennis.champion@baseline.app",
-          user_metadata: { full_name: "Javier" },
-        });
-      } else {
-        setUser(data.user);
-      }
-
-      const localMatches = localStorage.getItem("baseline_matches");
-      if (localMatches) {
-        try {
-          const parsed = JSON.parse(localMatches);
-          setMatches(parsed);
-          if (parsed.length > 0) setSelectedMatch(parsed[0]);
-        } catch {
-          setMatches(seedMatches);
-          setSelectedMatch(seedMatches[0]);
-        }
-      } else {
-        localStorage.setItem("baseline_matches", JSON.stringify(seedMatches));
-        setMatches(seedMatches);
-        setSelectedMatch(seedMatches[0]);
-      }
-
-      setLoading(false);
-    }
-
-    checkUser();
+    const readHash = () => {
+      const id = window.location.hash.slice(1);
+      if (tabs.some((t) => t.id === id)) setActive(id as Tab);
+    };
+    readHash();
+    window.addEventListener("hashchange", readHash);
+    return () => window.removeEventListener("hashchange", readHash);
   }, []);
-
-  async function handleSignOut() {
-    await supabase.auth.signOut();
-    router.push("/");
-    router.refresh();
+  useEffect(() => {
+    if (
+      process.env.NEXT_PUBLIC_SUPABASE_URL &&
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+    ) {
+      try {
+        createClient()
+          .auth.getSession()
+          .then(({ data }) => setEmail(data.session?.user.email || ""))
+          .catch(() => {});
+      } catch {}
+    }
+  }, []);
+  const navigate = (id: Tab) => {
+    setActive(id);
+    window.history.replaceState(null, "", `#${id}`);
+    setNotice("");
+  };
+  const practice = (id: string) => {
+    setInitialDrill(id);
+    navigate("training");
+  };
+  const stats = matchSummary(matches.value);
+  const real = matches.value
+    .filter((m) => !isLegacyDemo(m))
+    .sort((a, b) => b.date.localeCompare(a.date));
+  const recent = real.slice(0, 5);
+  const practiceMinutes = sessions.value.reduce((a, s) => a + s.minutes, 0);
+  const lastSetup = setups.value.at(-1);
+  const frame = lastSetup ? calculateSetup(lastSetup) : null;
+  const activeInfo = tabs.find((t) => t.id === active)!;
+  function saveMatch(m: Match) {
+    if (!isMatch(m) || !m.opponent || !m.score) {
+      setNotice("Check the match details before saving.");
+      return;
+    }
+    if (
+      matches.save((current) =>
+        current.some((x) => x.id === m.id)
+          ? current.map((x) => (x.id === m.id ? m : x))
+          : [m, ...current],
+      )
+    ) {
+      setForm(null);
+      navigate("matches");
+      setNotice("Match saved on this device.");
+    }
   }
-
-  function handleLogMatch(e: FormEvent) {
-    e.preventDefault();
-    if (!opponent || !score) return;
-
-    const newMatch: Match = {
-      id: Date.now().toString(),
-      opponent,
-      score,
-      surface,
-      style,
-      firstServe: Number(firstServe),
-      unforcedErrors: Number(unforcedErrors),
-      result,
-      date: new Date().toISOString().split("T")[0],
-      notes,
-    };
-
-    const updated = [newMatch, ...matches];
-    setMatches(updated);
-    localStorage.setItem("baseline_matches", JSON.stringify(updated));
-    setSelectedMatch(newMatch);
-    setOpponent("");
-    setScore("");
-    setSurface("hard");
-    setStyle("All-Court");
-    setFirstServe(60);
-    setUnforcedErrors(20);
-    setResult("win");
-    setNotes("");
-    setShowLogForm(false);
-    setAiReport(null);
+  function exportBackup() {
+    try {
+      downloadJson(`baseline-backup-${today()}.json`, {
+        version: 2,
+        matches: readStored(localStorage, "baseline_matches", [], validMatches),
+        practice: readStored(
+          localStorage,
+          "baseline_practice_v2",
+          [],
+          validSessions,
+        ),
+        setups: readStored(localStorage, "baseline_setups_v2", [], validSetups),
+      });
+      setNotice(
+        "Backup exported. Download video clips separately from the video journal.",
+      );
+    } catch {
+      setNotice("Could not export your backup. Stored data has not changed.");
+    }
   }
-
-  function handleAnalyzeMatch(match: Match) {
-    // Immediately show a premium, styled debrief for demonstration
-    const premium = {
-      title: `Claude Premium Debrief — vs ${match.opponent}`,
-      biomechanics: [
-        "Improved hip-shoulder separation on forehands, but reduced rotation on off-forehand exchanges causing power leakage.",
-        "Slight front-to-back weight shift at point-of-contact; increase forward momentum during attack-phase to improve transfer.",
-        "Consistent racket head lag during service toss; emphasis on earlier pronation will add pace without sacrificing spin."
-      ],
-      tactical: [
-        "Prefer short crosscourt exchanges to open up inside-out forehand opportunities.",
-        "Use heavier slice on the return-to-neutral point to buy time for recovery when opponent steps inside.",
-        "Target the backhand corner on 2nd serve returns to force shorter replies."
-      ],
-      drill: "Depth & Drive Drill — 3 sets of 8 crosscourt rally reps focusing on early weight transfer and finishing forward. Finish each set with 6 serves aimed to the T under pressure.",
-      meta: {
-        firstServe: match.firstServe,
-        unforcedErrors: match.unforcedErrors,
-        score: match.score,
-        date: match.date,
-      }
-    };
-
-    setAiReport(premium);
-    setAiLoading(false);
+  async function importBackup(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      if (file.size > 5 * 1024 * 1024) throw new Error();
+      const data = JSON.parse(await file.text());
+      if (
+        data.version !== 2 ||
+        !validMatches(data.matches) ||
+        !validSessions(data.practice) ||
+        !validSetups(data.setups)
+      )
+        throw new Error();
+      const a = matches.save((current) => mergeById(current, data.matches));
+      const b = sessions.save((current) => mergeById(current, data.practice));
+      const c = setups.save((current) => mergeById(current, data.setups));
+      setNotice(
+        a && b && c
+          ? "Backup imported. Existing entries with the same ID were kept."
+          : "Some entries could not be saved. Your original backup file is unchanged.",
+      );
+    } catch {
+      setNotice(
+        "This backup could not be imported. Use a Baseline v2 JSON backup under 5 MB.",
+      );
+    } finally {
+      e.target.value = "";
+    }
   }
-
-  const totalMatches = matches.length;
-  const wins = matches.filter((match) => match.result === "win").length;
-  const losses = totalMatches - wins;
-  const winRate = totalMatches > 0 ? Math.round((wins / totalMatches) * 100) : 0;
-  const avgFirstServe =
-    totalMatches > 0 ? Math.round(matches.reduce((acc, match) => acc + match.firstServe, 0) / totalMatches) : 0;
-
-  const surfaceCounts = matches.reduce((acc, match) => {
-    acc[match.surface] = (acc[match.surface] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>);
-
-  const favoriteSurface =
-    Object.entries(surfaceCounts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "N/A";
-
-  const tabs: { id: TabType; label: string }[] = [
-    { id: "matches", label: "Matches" },
-    { id: "lessons", label: "Lessons" },
-    { id: "exercises", label: "Exercises" },
-    { id: "gallery", label: "Gallery" },
-    { id: "racquet-lab", label: "Racquet Lab" },
-  ];
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-baseline-dark flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-10 h-10 border-4 border-baseline-green border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-baseline-text-secondary font-mono text-sm">Synchronizing match intelligence...</p>
-        </div>
-      </div>
-    );
+  async function signOut() {
+    try {
+      await createClient().auth.signOut();
+      setEmail("");
+    } catch {
+      setNotice("Could not sign out. Please try again.");
+    }
   }
-
   return (
-    <div className="min-h-screen bg-baseline-dark text-baseline-text-primary relative overflow-x-hidden flex flex-col">
-      <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff04_1px,transparent_1px),linear-gradient(to_bottom,#ffffff04_1px,transparent_1px)] bg-[size:48px_48px]" />
-      <div className="absolute top-[-20%] left-[-10%] w-[600px] h-[600px] bg-baseline-green/3 blur-[140px] rounded-full pointer-events-none" />
-
-      <header className="relative z-10 border-b border-baseline-border bg-baseline-dark-2/40 backdrop-blur-md px-6 md:px-12 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg baseline-gradient flex items-center justify-center">
-            <span className="text-sm font-extrabold text-baseline-dark">B</span>
-          </div>
-          <div>
-            <span className="font-display text-lg font-bold tracking-tight text-baseline-text-primary block">
-              Baseline
-            </span>
-            <span className="text-[10px] text-baseline-green font-mono uppercase tracking-wider">
-              Performance Hub
-            </span>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-4">
-          <div className="text-right hidden md:block">
-            <span className="text-xs text-baseline-text-dim block">Athlete Session</span>
-            <span className="text-sm font-semibold text-baseline-text-secondary font-mono">
-              {user?.email || "champion@baseline.app"}
+    <div className="baseline-workspace">
+      <a href="#workspace-content" className="skip-link">
+        Skip to content
+      </a>
+      <aside className="sidebar">
+        <Link href="/dashboard" className="brand">
+          <span className="brand-symbol">
+            b<span>•</span>
+          </span>
+          <span>
+            baseline<small>YOUR GAME, IN FOCUS</small>
+          </span>
+        </Link>
+        <div className="nav-caption">WORKSPACE</div>
+        <nav aria-label="Main navigation">
+          {tabs.map((t) => (
+            <button
+              key={t.id}
+              onClick={() => navigate(t.id)}
+              className={`nav-item ${active === t.id ? "active" : ""}`}
+              aria-current={active === t.id ? "page" : undefined}
+            >
+              <Icon name={t.icon} />
+              <span>{t.name}</span>
+              {t.id === "racquet-lab" && <i className="nav-dot" />}
+            </button>
+          ))}
+        </nav>
+        <div className="sidebar-bottom">
+          <div className="device-note">
+            <span className="status-dot" />
+            <span>
+              YOUR PERSONAL WORKSPACE
+              <small>Logs & setups saved on this device</small>
             </span>
           </div>
           <button
-            onClick={handleSignOut}
-            className="rounded-lg border border-baseline-border bg-baseline-dark-3 hover:bg-baseline-dark-4 px-3 py-1.5 text-xs text-baseline-text-secondary hover:text-baseline-text-primary transition-all font-mono"
+            className="text-button"
+            onClick={exportBackup}
+            disabled={!matches.ready || !sessions.ready}
           >
-            Sign out
+            <Icon name="download" />
+            Export backup
           </button>
+          <label className="text-button file-button">
+            Import backup
+            <input
+              type="file"
+              accept="application/json,.json"
+              aria-label="Import Baseline backup"
+              onChange={importBackup}
+            />
+          </label>
         </div>
-      </header>
-
-      <main className="relative z-10 flex-1 px-4 md:px-12 py-8 max-w-7xl mx-auto w-full">
-        <div className="mb-8 overflow-x-auto border-b border-baseline-border">
-          <div className="flex gap-2 min-w-max">
-            {tabs.map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`px-4 py-3 text-xs font-mono uppercase tracking-wider border-b-2 transition-all ${
-                  activeTab === tab.id
-                    ? "border-baseline-green text-baseline-green"
-                    : "border-transparent text-baseline-text-dim hover:text-baseline-text-secondary"
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
+      </aside>
+      <div className="workspace-main">
+        <header className="workspace-topbar">
+          <span className="breadcrumb">
+            Workspace <span>/</span> <b>{activeInfo.name}</b>
+          </span>
+          <div className="account">
+            <span className="status-dot" />
+            <span>{email || "Personal workspace"}</span>
+            {email ? (
+              <button onClick={signOut}>Sign out</button>
+            ) : (
+              <Link href="/auth/login">Sign in</Link>
+            )}
           </div>
-        </div>
-
-        {activeTab === "matches" && (
-          <section className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-            <div className="lg:col-span-8 flex flex-col gap-8">
-              <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-4">
-                <div className="rounded-xl border border-baseline-border bg-baseline-dark-3/60 backdrop-blur-sm p-4 hover:border-baseline-green/20 transition-all">
-                  <span className="text-xs text-baseline-text-dim uppercase tracking-wider font-mono">Win Rate</span>
-                  <div className="flex items-baseline gap-1 mt-2">
-                    <span className="text-3xl font-bold font-display text-baseline-green">{winRate}%</span>
-                    <span className="text-xs text-baseline-text-secondary">({wins}W - {losses}L)</span>
-                  </div>
-                </div>
-
-                <div className="rounded-xl border border-baseline-border bg-baseline-dark-3/60 backdrop-blur-sm p-4 hover:border-baseline-green/20 transition-all">
-                  <span className="text-xs text-baseline-text-dim uppercase tracking-wider font-mono">Coaching Cost Saved</span>
-                  <div className="flex flex-col gap-1 mt-2">
-                    <span className="text-2xl font-bold font-display text-baseline-green">~$240</span>
-                    <span className="text-xs text-baseline-text-secondary">3 AI debriefs vs. private coaching sessions</span>
-                  </div>
-                </div>
-
-                <div className="rounded-xl border border-baseline-border bg-baseline-dark-3/60 backdrop-blur-sm p-4 hover:border-baseline-green/20 transition-all">
-                  <span className="text-xs text-baseline-text-dim uppercase tracking-wider font-mono">Total Logged</span>
-                  <div className="flex items-baseline gap-1 mt-2">
-                    <span className="text-3xl font-bold font-display text-baseline-text-primary">{totalMatches}</span>
-                    <span className="text-xs text-baseline-text-secondary">Matches</span>
-                  </div>
-                </div>
-
-                <div className="rounded-xl border border-baseline-border bg-baseline-dark-3/60 backdrop-blur-sm p-4 hover:border-baseline-green/20 transition-all">
-                  <span className="text-xs text-baseline-text-dim uppercase tracking-wider font-mono">Avg First Serve</span>
-                  <div className="flex items-baseline gap-1 mt-2">
-                    <span className="text-3xl font-bold font-display text-baseline-text-primary">{avgFirstServe}%</span>
-                    <span className="text-xs text-baseline-text-dim font-mono">target &gt;65%</span>
-                  </div>
-                </div>
-
-                <div className="rounded-xl border border-baseline-border bg-baseline-dark-3/60 backdrop-blur-sm p-4 hover:border-baseline-green/20 transition-all">
-                  <span className="text-xs text-baseline-text-dim uppercase tracking-wider font-mono">Fav Surface</span>
-                  <div className="flex items-baseline gap-1 mt-2">
-                    <span className="text-lg font-bold font-display text-baseline-text-primary capitalize">
-                      {favoriteSurface.replace("_", " ")}
-                    </span>
-                  </div>
-                </div>
+        </header>
+        <main id="workspace-content" className="workspace-content">
+          <div className="page-heading">
+            <div>
+              <div className="eyebrow">
+                {active === "overview"
+                  ? "THE EVERYDAY TENNIS WORKSPACE"
+                  : "BASELINE / " + activeInfo.name.toUpperCase()}
               </div>
-
-              <div className="rounded-2xl border border-baseline-border bg-baseline-dark-3/40 backdrop-blur-sm p-6 flex flex-col gap-6">
-                <div className="flex items-center justify-between gap-4">
-                  <div>
-                    <h2 className="font-display text-xl font-bold text-baseline-text-primary">Match Logbook</h2>
-                    <p className="text-xs text-baseline-text-dim">Record match telemetry and review AI diagnostics</p>
-                  </div>
+              <h1>
+                {active === "overview"
+                  ? "Make your next session count."
+                  : activeInfo.name}
+              </h1>
+              <p>{activeInfo.description}</p>
+            </div>
+            {active === "overview" && (
+              <button className="button primary" onClick={() => setForm("new")}>
+                <Icon name="plus" />
+                Log a match
+              </button>
+            )}
+          </div>
+          {(notice || matches.error || sessions.error) && (
+            <p className="notice" role="status">
+              {notice || matches.error || sessions.error}
+            </p>
+          )}
+          {active === "overview" && (
+            <>
+              <section className="overview-hero">
+                <div className="hero-copy">
+                  <span className="hero-tag">
+                    <span className="status-dot" />
+                    THE DETAILS MAKE THE DIFFERENCE
+                  </span>
+                  <h2>
+                    Your racket.
+                    <br />
+                    Your feel. <em>Your game.</em>
+                  </h2>
+                  <p>
+                    Explore a few grams here, a new balance there.
+                    <br className="desktop-only" /> Make your next change with a
+                    clearer picture.
+                  </p>
                   <button
-                    onClick={() => setShowLogForm(!showLogForm)}
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-baseline-green hover:bg-baseline-green-dim px-4 py-2 text-xs font-semibold text-baseline-dark transition-all font-mono"
+                    className="button primary"
+                    onClick={() => navigate("racquet-lab")}
                   >
-                    {showLogForm ? "Cancel Logging" : "Log New Match +"}
+                    Open Racket Lab <Icon name="arrow" />
                   </button>
                 </div>
-
-                {showLogForm && (
-                  <form onSubmit={handleLogMatch} className="rounded-xl border border-baseline-green/10 bg-baseline-dark-4/80 p-5 space-y-4">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-[10px] uppercase font-mono text-baseline-text-secondary mb-1">Opponent</label>
-                        <input
-                          type="text"
-                          required
-                          placeholder="e.g. Roger Federer"
-                          value={opponent}
-                          onChange={(e) => setOpponent(e.target.value)}
-                          className="w-full rounded-lg border border-baseline-border bg-baseline-dark px-3 py-2 text-sm text-baseline-text-primary placeholder:text-baseline-text-dim focus:outline-none focus:ring-1 focus:ring-baseline-green/30"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[10px] uppercase font-mono text-baseline-text-secondary mb-1">Score</label>
-                        <input
-                          type="text"
-                          required
-                          placeholder="e.g. 6-4, 7-6 (3)"
-                          value={score}
-                          onChange={(e) => setScore(e.target.value)}
-                          className="w-full rounded-lg border border-baseline-border bg-baseline-dark px-3 py-2 text-sm text-baseline-text-primary placeholder:text-baseline-text-dim focus:outline-none focus:ring-1 focus:ring-baseline-green/30"
-                        />
-                      </div>
+                <CourtArt />
+                <span className="court-caption">
+                  BUILD IT. COMPARE IT. TAKE IT TO COURT.
+                </span>
+              </section>
+              <section
+                className="stats-row"
+                aria-label="Your performance summary"
+              >
+                <Stat
+                  label="MATCHES LOGGED"
+                  value={String(stats.total)}
+                  note={`${stats.wins} wins · ${stats.losses} losses`}
+                />
+                <Stat
+                  label="WIN RATE"
+                  value={stats.winRate === null ? "—" : stats.winRate + "%"}
+                  note={
+                    stats.total
+                      ? "Based on your logged matches"
+                      : "Log a match to begin"
+                  }
+                />
+                <Stat
+                  label="FIRST SERVES IN"
+                  value={stats.avgServe === null ? "—" : stats.avgServe + "%"}
+                  note={
+                    stats.serveCount
+                      ? `Average across ${stats.serveCount} tracked matches`
+                      : "Add this stat when you track it"
+                  }
+                />
+                <Stat
+                  label="PRACTICE TIME"
+                  value={practiceMinutes ? practiceMinutes + " min" : "—"}
+                  note={`${sessions.value.length} sessions in your journal`}
+                />
+              </section>
+              <div className="overview-grid">
+                <section className="panel setup-overview">
+                  <div className="section-heading">
+                    <div className="eyebrow">
+                      <Icon name="racket" />
+                      YOUR EQUIPMENT
                     </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                      <div>
-                        <label className="block text-[10px] uppercase font-mono text-baseline-text-secondary mb-1">Surface</label>
-                        <select
-                          value={surface}
-                          onChange={(e) => setSurface(e.target.value as Match["surface"])}
-                          className="w-full rounded-lg border border-baseline-border bg-baseline-dark px-3 py-2 text-sm text-baseline-text-primary focus:outline-none focus:ring-1 focus:ring-baseline-green/30"
-                        >
-                          <option value="hard">Hard Court</option>
-                          <option value="clay">Clay Court</option>
-                          <option value="grass">Grass Court</option>
-                          <option value="carpet">Carpet Court</option>
-                          <option value="indoor_hard">Indoor Hard</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-[10px] uppercase font-mono text-baseline-text-secondary mb-1">First Serve %</label>
-                        <input
-                          type="number"
-                          min="0"
-                          max="100"
-                          value={firstServe}
-                          onChange={(e) => setFirstServe(Number(e.target.value))}
-                          className="w-full rounded-lg border border-baseline-border bg-baseline-dark px-3 py-2 text-sm text-baseline-text-primary focus:outline-none focus:ring-1 focus:ring-baseline-green/30"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[10px] uppercase font-mono text-baseline-text-secondary mb-1">Unforced Errors</label>
-                        <input
-                          type="number"
-                          min="0"
-                          value={unforcedErrors}
-                          onChange={(e) => setUnforcedErrors(Number(e.target.value))}
-                          className="w-full rounded-lg border border-baseline-border bg-baseline-dark px-3 py-2 text-sm text-baseline-text-primary focus:outline-none focus:ring-1 focus:ring-baseline-green/30"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-[10px] uppercase font-mono text-baseline-text-secondary mb-1">Opponent Style</label>
-                        <input
-                          type="text"
-                          placeholder="e.g. Aggressive Baseliner"
-                          value={style}
-                          onChange={(e) => setStyle(e.target.value)}
-                          className="w-full rounded-lg border border-baseline-border bg-baseline-dark px-3 py-2 text-sm text-baseline-text-primary placeholder:text-baseline-text-dim focus:outline-none focus:ring-1 focus:ring-baseline-green/30"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[10px] uppercase font-mono text-baseline-text-secondary mb-1">Outcome</label>
-                        <div className="grid grid-cols-2 gap-2 mt-1">
-                          <button
-                            type="button"
-                            onClick={() => setResult("win")}
-                            className={`py-1.5 rounded-lg border text-xs font-semibold font-mono transition-all ${
-                              result === "win"
-                                ? "bg-baseline-green border-baseline-green text-baseline-dark"
-                                : "border-baseline-border bg-baseline-dark text-baseline-text-secondary"
-                            }`}
-                          >
-                            Won
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setResult("loss")}
-                            className={`py-1.5 rounded-lg border text-xs font-semibold font-mono transition-all ${
-                              result === "loss"
-                                ? "bg-red-500 border-red-500 text-white"
-                                : "border-baseline-border bg-baseline-dark text-baseline-text-secondary"
-                            }`}
-                          >
-                            Lost
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-
+                    <button
+                      className="text-button"
+                      onClick={() => navigate("racquet-lab")}
+                    >
+                      Racket Lab <Icon name="arrow" />
+                    </button>
+                  </div>
+                  <h2>
+                    {lastSetup?.name || "Find a setup that feels like you."}
+                  </h2>
+                  <p>
+                    {lastSetup
+                      ? lastSetup.model
+                      : "Save your racket, explore weight changes and compare configurations side by side."}
+                  </p>
+                  <div className="setup-mini-stats">
                     <div>
-                      <label className="block text-[10px] uppercase font-mono text-baseline-text-secondary mb-1">Match Insights & Notes</label>
-                      <textarea
-                        rows={4}
-                        value={notes}
-                        onChange={(e) => setNotes(e.target.value)}
-                        placeholder="Add any notes, observational insights, or coaching cues..."
-                        className="w-full mt-2 rounded-lg border border-baseline-border bg-baseline-dark px-3 py-2 text-sm text-baseline-text-primary placeholder:text-baseline-text-dim focus:outline-none focus:ring-1 focus:ring-baseline-green/30"
-                      />
+                      <strong>
+                        {frame ? frame.weight.toFixed(1) : "—"}
+                        <small> g</small>
+                      </strong>
+                      <span>WEIGHT</span>
                     </div>
-
-                    <div className="flex justify-end">
-                      <button
-                        type="submit"
-                        className="inline-flex items-center rounded-lg bg-baseline-green hover:bg-baseline-green-dim px-4 py-2 text-xs font-semibold text-baseline-dark transition-all font-mono"
-                      >
-                        Save Match
-                      </button>
+                    <div>
+                      <strong>
+                        {frame ? frame.balance.toFixed(1) : "—"}
+                        <small> cm</small>
+                      </strong>
+                      <span>BALANCE</span>
                     </div>
-                  </form>
-                )}
-
-                <div className="space-y-3">
-                  {matches.length === 0 ? (
-                    <div className="text-center py-12 rounded-xl border border-dashed border-baseline-border bg-baseline-dark-4/20">
-                      <p className="text-sm text-baseline-text-dim font-mono">No matches logged yet.</p>
+                    <div>
+                      <strong>{frame?.swingweight?.toFixed(0) || "—"}</strong>
+                      <span>SW ESTIMATE</span>
+                    </div>
+                  </div>
+                  <div className="card-bottom">
+                    <span>
+                      {lastSetup
+                        ? `${setups.value.length} saved setups · estimates`
+                        : "Your first setup is a few inputs away"}
+                    </span>
+                    <button
+                      className="icon-button"
+                      aria-label="Open Racket Lab"
+                      onClick={() => navigate("racquet-lab")}
+                    >
+                      <Icon name="arrow" />
+                    </button>
+                  </div>
+                </section>
+                <section className="panel next-practice">
+                  <div className="section-heading">
+                    <div className="eyebrow">NEXT ON COURT</div>
+                    <span className="badge">15 MIN / SOLO</span>
+                  </div>
+                  <span className="session-number">
+                    01 <span>/ SERVE</span>
+                  </span>
+                  <h2>Serve with a destination.</h2>
+                  <p>
+                    Three targets. Thirty serves. Give every ball a purpose and
+                    keep a result you can improve.
+                  </p>
+                  <div className="practice-target">
+                    <Icon name="check" />
+                    Target: record hits out of 30 serves
+                  </div>
+                  <button
+                    className="text-button"
+                    onClick={() => practice("serve")}
+                  >
+                    View session plan <Icon name="arrow" />
+                  </button>
+                </section>
+              </div>
+              <div className="overview-grid lower-grid">
+                <section className="panel">
+                  <div className="section-heading">
+                    <h2>Recent matches</h2>
+                    <button
+                      className="text-button"
+                      onClick={() => navigate("matches")}
+                    >
+                      View log <Icon name="arrow" />
+                    </button>
+                  </div>
+                  {recent.length ? (
+                    <div className="match-list">
+                      {recent.slice(0, 3).map((m) => (
+                        <button
+                          className="match-row"
+                          key={m.id}
+                          onClick={() => navigate("matches")}
+                        >
+                          <span className={`result-mark ${m.result}`}>
+                            {m.result === "win" ? "W" : "L"}
+                          </span>
+                          <span className="match-person">
+                            <b>vs {m.opponent}</b>
+                            <small>{dateLabel(m.date)}</small>
+                          </span>
+                          <span className="match-score">{m.score}</span>
+                        </button>
+                      ))}
                     </div>
                   ) : (
-                    matches.map((match) => (
-                      <div
-                        key={match.id}
-                        onClick={() => {
-                          setSelectedMatch(match);
-                          setAiReport(null);
-                        }}
-                        className={`flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-xl border transition-all cursor-pointer ${
-                          selectedMatch?.id === match.id
-                            ? "border-baseline-green bg-baseline-dark-4/90 shadow-[0_0_12px_rgba(200,241,94,0.06)]"
-                            : "border-baseline-border bg-baseline-dark-4/40 hover:bg-baseline-dark-4/60 hover:border-baseline-border/80"
-                        }`}
+                    <div className="empty-state compact-empty">
+                      <Icon name="matches" />
+                      <h3>Let the patterns emerge.</h3>
+                      <p>
+                        Your own matches will appear here. Start with the score
+                        and one thing you learned.
+                      </p>
+                      <button
+                        className="text-button"
+                        onClick={() => setForm("new")}
                       >
-                        <div className="flex items-center gap-4">
-                          <div
-                            className={`w-2.5 h-2.5 rounded-full ${
-                              match.result === "win" ? "bg-baseline-green animate-pulse-glow" : "bg-red-500"
-                            }`}
-                          />
-                          <div>
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span className="font-semibold text-baseline-text-primary text-sm sm:text-base">
-                                vs {match.opponent}
-                              </span>
-                              <span
-                                className={`text-[10px] font-mono px-2 py-0.5 rounded uppercase ${
-                                  match.surface === "clay"
-                                    ? "bg-surface-clay/20 text-orange-400 border border-orange-500/20"
-                                    : match.surface === "grass"
-                                      ? "bg-surface-grass/20 text-green-400 border border-green-500/20"
-                                      : match.surface === "hard"
-                                        ? "bg-surface-hard/20 text-blue-400 border border-blue-500/20"
-                                        : "bg-purple-500/10 text-purple-400 border border-purple-500/20"
-                                }`}
-                              >
-                                {match.surface.replace("_", " ")}
-                              </span>
-                            </div>
-                            <span className="text-xs text-baseline-text-dim font-mono">
-                              {match.date} - {match.style}
-                            </span>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center justify-between sm:justify-end gap-6 mt-3 sm:mt-0 border-t border-baseline-border/40 sm:border-0 pt-2 sm:pt-0">
-                          <div className="flex items-center gap-4 text-xs font-mono text-baseline-text-secondary">
-                            <div>
-                              <span className="text-[10px] text-baseline-text-dim block">1st Serve</span>
-                              <span>{match.firstServe}%</span>
-                            </div>
-                            <div>
-                              <span className="text-[10px] text-baseline-text-dim block">Errors</span>
-                              <span>{match.unforcedErrors}</span>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center gap-3">
-                            <span className="text-base font-bold font-mono tracking-tight text-baseline-text-primary">
-                              {match.score}
-                            </span>
-                            <span className={match.result === "win" ? "win-badge" : "loss-badge"}>
-                              {match.result === "win" ? "WIN" : "LOSS"}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-            </div>
-
-            <aside className="lg:col-span-4 flex flex-col gap-6">
-              <div className="rounded-2xl border border-baseline-border bg-baseline-dark-3/60 backdrop-blur-sm p-6 h-full flex flex-col">
-                <div className="flex items-center gap-2 border-b border-baseline-border pb-4 mb-4">
-                  <div>
-                    <h3 className="font-display font-bold text-base text-baseline-text-primary">AI Coach</h3>
-                    <span className="text-[9px] text-baseline-green font-mono uppercase tracking-wider">
-                      Claude Performance Model
-                    </span>
-                  </div>
-                </div>
-
-                {selectedMatch ? (
-                  <div className="flex-1 flex flex-col">
-                    <div className="mb-4">
-                      <span className="text-[10px] text-baseline-text-dim uppercase font-mono block">Selected telemetry</span>
-                      <span className="font-semibold text-sm text-baseline-text-secondary">
-                        vs {selectedMatch.opponent} ({selectedMatch.score})
-                      </span>
+                        Log your first match <Icon name="plus" />
+                      </button>
                     </div>
-
-                    {!aiReport && !aiLoading && (
-                      <div className="flex-1 flex flex-col items-center justify-center text-center py-12 px-4 rounded-xl border border-dashed border-baseline-border bg-baseline-dark-4/20">
-                        <p className="text-xs text-baseline-text-dim font-mono mb-4 leading-relaxed">
-                          Telemetric match data imported. Generate a complete tactical debrief of your performance patterns.
-                        </p>
-                        <button
-                          onClick={() => handleAnalyzeMatch(selectedMatch)}
-                          className="w-full rounded-lg bg-baseline-dark-3 hover:bg-baseline-dark-4 border border-baseline-border text-baseline-text-secondary hover:text-baseline-green hover:border-baseline-green/50 py-2 text-xs font-semibold font-mono tracking-wide transition-all"
+                  )}
+                </section>
+                <section className="panel form-panel">
+                  <div className="section-heading">
+                    <h2>Recent form</h2>
+                    <span className="badge">LAST 5 MATCHES</span>
+                  </div>
+                  <div className="form-dots">
+                    {Array.from({ length: 5 }, (_, i) => {
+                      const m = [...recent].reverse()[i];
+                      return (
+                        <span
+                          key={i}
+                          className={m ? m.result : "empty"}
+                          title={
+                            m ? `${m.result} vs ${m.opponent}` : "No match yet"
+                          }
                         >
-                          Analyze Performance With Claude
-                        </button>
-                      </div>
-                    )}
-
-                    {aiLoading && (
-                      <div className="flex-1 flex flex-col items-center justify-center py-12 text-center">
-                        <div className="w-8 h-8 border-3 border-baseline-green border-t-transparent rounded-full animate-spin mb-4" />
-                        <span className="text-xs text-baseline-text-secondary font-mono">
-                          Claude is parsing serving vectors and stroke depth ratios...
+                          {m ? (m.result === "win" ? "W" : "L") : "—"}
                         </span>
-                      </div>
-                    )}
-
-                    {aiReport && typeof aiReport === 'object' && (
-                      <div className="flex-1 overflow-y-auto max-h-[520px] pr-1 space-y-4 animate-fade-in text-sm font-sans leading-relaxed select-text">
-                        <div className="rounded-lg border border-baseline-green/10 bg-gradient-to-r from-neutral-900 to-neutral-800 p-4">
-                          <h4 className="text-sm font-display font-bold text-baseline-green">{aiReport.title || 'Claude Premium Debrief'}</h4>
-                          <p className="text-xs text-baseline-text-dim mt-1">Premium coaching insights — biomechanical & tactical</p>
-                        </div>
-
-                        <div className="grid grid-cols-1 gap-4">
-                          <div className="rounded-lg border border-baseline-border bg-baseline-dark-4 p-4">
-                            <h5 className="text-sm font-bold text-baseline-green mb-2">Biomechanical Feedback</h5>
-                            <ul className="list-disc list-inside text-baseline-text-secondary space-y-1">
-                              {Array.isArray(aiReport.biomechanics) ? aiReport.biomechanics.map((b: string, i: number) => (
-                                <li key={i}>{b}</li>
-                              )) : (<li>{aiReport.biomechanics || '—'}</li>)}
-                            </ul>
-                          </div>
-
-                          <div className="rounded-lg border border-baseline-border bg-baseline-dark-4 p-4">
-                            <h5 className="text-sm font-bold text-baseline-green mb-2">Tactical Adjustments</h5>
-                            <ul className="list-disc list-inside text-baseline-text-secondary space-y-1">
-                              {Array.isArray(aiReport.tactical) ? aiReport.tactical.map((t: string, i: number) => (
-                                <li key={i}>{t}</li>
-                              )) : (<li>{aiReport.tactical || '—'}</li>)}
-                            </ul>
-                          </div>
-
-                          <div className="rounded-lg border border-baseline-border bg-baseline-dark-4 p-4">
-                            <h5 className="text-sm font-bold text-baseline-green mb-2">Recommended Drill</h5>
-                            <p className="text-baseline-text-secondary">{aiReport.drill}</p>
-                          </div>
-
-                          <div className="rounded-lg border border-baseline-border bg-baseline-dark-3/60 p-3 text-xs text-baseline-text-dim">
-                            <strong className="font-mono">Session Notes:</strong>
-                            <span className="ml-2">{`1st Serve ${aiReport.meta?.firstServe}% • ${aiReport.meta?.unforcedErrors} errors • ${aiReport.meta?.score} (${aiReport.meta?.date})`}</span>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                    {aiReport && typeof aiReport === 'string' && (
-                      <div className="flex-1 overflow-y-auto max-h-[460px] pr-1 space-y-4 animate-fade-in text-sm font-sans leading-relaxed text-baseline-text-secondary select-text">
-                        <div className="border border-baseline-green/10 bg-baseline-green/5 rounded-lg p-3 text-xs border-dashed text-baseline-green font-mono">
-                          Analytical pattern matching finished. Strategic directives loaded below.
-                        </div>
-
-                        <div className="prose prose-invert prose-xs text-xs space-y-4">
-                          {aiReport.split("\n\n").map((para, i) => {
-                            if (para.startsWith("###")) {
-                              return (
-                                <h4 key={i} className="text-sm font-bold text-baseline-text-primary mt-4 border-b border-baseline-border pb-1 font-display">
-                                  {para.replace("###", "")}
-                                </h4>
-                              );
-                            }
-                            if (para.startsWith("####")) {
-                              return (
-                                <h5 key={i} className="text-xs font-bold text-baseline-green uppercase tracking-wide font-mono mt-3">
-                                  {para.replace("####", "")}
-                                </h5>
-                              );
-                            }
-                            if (para.startsWith("*") || para.startsWith("-")) {
-                              return (
-                                <ul key={i} className="list-disc list-inside space-y-1.5 text-baseline-text-secondary">
-                                  {para.split("\n").map((li, j) => (
-                                    <li key={j} className="marker:text-baseline-green">
-                                      {li.replace(/^[\*\-\s]+/, "")}
-                                    </li>
-                                  ))}
-                                </ul>
-                              );
-                            }
-                            if (para.match(/^\d+\./)) {
-                              return (
-                                <ol key={i} className="list-decimal list-inside space-y-1.5 text-baseline-text-secondary">
-                                  {para.split("\n").map((li, j) => (
-                                    <li key={j} className="marker:text-baseline-green">
-                                      {li.replace(/^\d+\.\s+/, "")}
-                                    </li>
-                                  ))}
-                                </ol>
-                              );
-                            }
-                            return (
-                              <p key={i} className="text-baseline-text-secondary">
-                                {para}
-                              </p>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
+                      );
+                    })}
                   </div>
-                ) : (
-                  <div className="flex-1 flex items-center justify-center text-center text-xs text-baseline-text-dim font-mono py-12">
-                    Select a match from your logbook to unlock AI strategic diagnostics.
+                  <p>
+                    {recent.length
+                      ? "Results shown oldest to newest. Use your match notes to understand the story behind the score."
+                      : "One result is a moment. A match journal helps you see the bigger picture."}
+                  </p>
+                  <div className="focus-note">
+                    <span>YOUR LATEST FOCUS</span>
+                    <p>
+                      {real[0]?.focus ||
+                        "Choose one thing to carry into your next session."}
+                    </p>
                   </div>
-                )}
+                </section>
               </div>
-            </aside>
-          </section>
-        )}
-
-        {activeTab === "lessons" && (
-          <section className="flex flex-col gap-8">
-            <div className="rounded-2xl border border-baseline-border bg-baseline-dark-3/40 p-6">
-              <h2 className="font-display text-xl font-bold mb-4">Lessons</h2>
-              <LessonsList />
-            </div>
-
-            <div className="border-t border-baseline-border pt-8">
-              <h2 className="font-display text-xl font-bold mb-4">Tactical Debrief</h2>
-              <AIDebrief />
-            </div>
-          </section>
-        )}
-
-        {activeTab === "exercises" && (
-          <section className="flex flex-col gap-8">
-            <div className="rounded-2xl border border-baseline-border bg-baseline-dark-3/40 p-6">
-              <h2 className="font-display text-xl font-bold mb-4">Exercises & Drills</h2>
-              <ExercisesHub />
-            </div>
-          </section>
-        )}
-
-        {activeTab === "gallery" && (
-          <section className="flex flex-col gap-8">
-            <div className="rounded-2xl border border-baseline-border bg-baseline-dark-3/40 p-6">
-              <h2 className="font-display text-xl font-bold mb-4">Video Gallery</h2>
-              <VideoGallery />
-            </div>
-          </section>
-        )}
-
-        {activeTab === "racquet-lab" && (
-          <section className="flex flex-col gap-8">
-            <div className="rounded-2xl border border-baseline-border bg-baseline-dark-3/40 p-6">
-              <RacquetLab />
-            </div>
-          </section>
-        )}
-      </main>
-
-      <div className="absolute bottom-[-15%] right-[-10%] w-[500px] h-[500px] bg-baseline-green/2 blur-[120px] rounded-full pointer-events-none" />
-
-      <footer className="relative z-10 border-t border-baseline-border bg-baseline-dark-2/20 backdrop-blur-sm px-6 py-6 mt-12 text-center text-[10px] font-mono text-baseline-text-dim">
-        <span>2026 Baseline Performance Intelligence. Longitudinal athletic diagnostics dataset platform.</span>
-      </footer>
+            </>
+          )}
+          {active === "racquet-lab" && <RacquetLab />}
+          {active === "matches" && (
+            <MatchHub
+              matches={matches.value}
+              onLog={() => setForm("new")}
+              onEdit={setForm}
+              onPractice={practice}
+            />
+          )}
+          {active === "training" && (
+            <TrainingHub
+              key={initialDrill}
+              sessions={sessions.value}
+              saveSessions={sessions.save}
+              initialDrill={initialDrill}
+            />
+          )}
+          {active === "lessons" && <LessonsHub onPractice={practice} />}
+          {active === "gallery" && <VideoGallery />}
+          <div className="mobile-backup">
+            <button className="text-button" onClick={exportBackup}>
+              <Icon name="download" />
+              Export backup
+            </button>
+            <label className="text-button file-button">
+              Import backup
+              <input
+                type="file"
+                accept="application/json,.json"
+                aria-label="Import backup on mobile"
+                onChange={importBackup}
+              />
+            </label>
+          </div>
+          <footer className="workspace-footer">
+            <span>
+              baseline <b>·</b> Built for the time between matches.
+            </span>
+            <span>Your next improvement starts with a detail.</span>
+          </footer>
+        </main>
+      </div>
+      {form && (
+        <MatchForm
+          initial={form === "new" ? undefined : form}
+          onSave={saveMatch}
+          onClose={() => setForm(null)}
+        />
+      )}
     </div>
   );
 }

@@ -8,31 +8,41 @@ import { createClient } from "@/lib/supabase/client";
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const redirectTo = searchParams.get("redirectedFrom") || "/dashboard";
+  const requestedPath = searchParams.get("redirectedFrom");
+  const redirectTo =
+    requestedPath?.startsWith("/") &&
+    !requestedPath.startsWith("//") &&
+    !requestedPath.includes("\\")
+      ? requestedPath
+      : "/dashboard";
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const supabase = createClient();
-
   async function handleEmailLogin(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
     setError(null);
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-
-    if (error) {
-      setError(error.message);
-      setLoading(false);
-    } else {
+    try {
+      const { error } = await createClient().auth.signInWithPassword({
+        email,
+        password,
+      });
+      if (error) {
+        setError(error.message);
+        return;
+      }
       router.push(redirectTo);
       router.refresh();
+    } catch {
+      setError(
+        "Could not connect to sign-in. Try again, or use the local workspace.",
+      );
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -41,7 +51,7 @@ function LoginForm() {
       setLoading(true);
       console.log("Starting Google Login...");
 
-      const { error } = await supabase.auth.signInWithOAuth({
+      const { error } = await createClient().auth.signInWithOAuth({
         provider: "google",
         options: {
           redirectTo: `${window.location.origin}/auth/callback`,
@@ -62,6 +72,12 @@ function LoginForm() {
 
   return (
     <div className="w-full max-w-sm animate-fade-in">
+      <Link
+        href="/dashboard"
+        className="block text-center text-baseline-green text-sm mb-5"
+      >
+        Continue without an account →
+      </Link>
       <div className="text-center mb-8">
         <h1 className="font-display text-3xl font-bold text-baseline-text-primary mb-2">
           Welcome back
@@ -169,12 +185,16 @@ function LoginForm() {
 
 export default function LoginPage() {
   return (
-    <Suspense fallback={
-      <div className="w-full max-w-sm text-center py-12">
-        <div className="inline-block w-6 h-6 border-2 border-baseline-green border-t-transparent rounded-full animate-spin"></div>
-        <p className="mt-4 text-sm text-baseline-text-secondary font-mono">Loading secure login...</p>
-      </div>
-    }>
+    <Suspense
+      fallback={
+        <div className="w-full max-w-sm text-center py-12">
+          <div className="inline-block w-6 h-6 border-2 border-baseline-green border-t-transparent rounded-full animate-spin"></div>
+          <p className="mt-4 text-sm text-baseline-text-secondary font-mono">
+            Loading secure login...
+          </p>
+        </div>
+      }
+    >
       <LoginForm />
     </Suspense>
   );

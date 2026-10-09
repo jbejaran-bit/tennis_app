@@ -6,8 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 
 export default function OnboardingPage() {
   const router = useRouter();
-  const supabase = createClient();
-  
+
   const [skillLevel, setSkillLevel] = useState<string | null>(null);
   const [utr, setUtr] = useState<number>(8.0);
   const [height, setHeight] = useState("");
@@ -15,50 +14,77 @@ export default function OnboardingPage() {
   const [hand, setHand] = useState("Right");
   const [gender, setGender] = useState("Male");
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
   const levels = ["Beginner", "Intermediate", "Advanced", "Pro"];
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!skillLevel) return;
-    
+
     setLoading(true);
 
-    // Get the current logged-in user
-    const { data: { user } } = await supabase.auth.getUser();
-
-    if (user) {
-      // Update the profiles table you just created in Supabase!
-      await supabase.from("profiles").update({
-        skill_level: skillLevel,
-        utr_rating: utr,
-        height: parseFloat(height || "0"),
-        weight: parseFloat(weight || "0"),
-        dominant_hand: hand,
-        gender: gender,
-        onboarding_completed: true,
-      }).eq("id", user.id);
+    setError("");
+    try {
+      const supabase = createClient();
+      const {
+        data: { user },
+        error: authError,
+      } = await supabase.auth.getUser();
+      if (authError) throw authError;
+      if (!user) {
+        router.push("/auth/login");
+        return;
+      }
+      const { error: saveError } = await supabase
+        .from("profiles")
+        .update({
+          skill_level: skillLevel,
+          utr_rating: utr,
+          height: height ? Number(height) : null,
+          weight: weight ? Number(weight) : null,
+          dominant_hand: hand,
+          gender,
+          onboarding_completed: true,
+        })
+        .eq("id", user.id);
+      if (saveError) throw saveError;
+      router.push("/dashboard");
+      router.refresh();
+    } catch {
+      setError(
+        "Your profile could not be saved. Try again, or continue to the workspace.",
+      );
+    } finally {
+      setLoading(false);
     }
-
-    // Redirect to the main dashboard
-    router.push("/dashboard");
-    router.refresh();
   }
 
   return (
     <div className="min-h-screen bg-neutral-950 flex flex-col items-center justify-center p-6 text-white">
       <div className="w-full max-w-md bg-neutral-900 border border-neutral-800 rounded-2xl p-8 shadow-2xl">
-        
         <div className="text-center mb-8">
           <div className="w-12 h-12 bg-green-500 rounded-lg flex items-center justify-center mx-auto mb-4">
             <span className="text-black font-bold text-xl">B</span>
           </div>
           <h1 className="text-3xl font-bold mb-2">Welcome to Baseline</h1>
-          <p className="text-neutral-400 text-sm">Let's calibrate your AI coach.</p>
+          <p className="text-neutral-400 text-sm">
+            Add some context to your player profile.
+          </p>
         </div>
 
+        <a
+          href="/dashboard"
+          className="block text-center text-sm text-lime-300 mb-5"
+        >
+          Continue to workspace
+        </a>
+        {error && (
+          <p role="alert" className="text-sm text-red-300 mb-5">
+            {error}
+          </p>
+        )}
         <form onSubmit={handleSubmit} className="space-y-8">
-          
           {/* Skill Level Selection */}
           <div>
             <label className="block text-sm font-semibold text-neutral-300 mb-3 uppercase tracking-wider">
@@ -85,7 +111,9 @@ export default function OnboardingPage() {
           {/* Physical Attributes */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-semibold text-neutral-300 mb-2">Height (cm)</label>
+              <label className="block text-sm font-semibold text-neutral-300 mb-2">
+                Height (cm)
+              </label>
               <input
                 type="number"
                 value={height}
@@ -96,7 +124,9 @@ export default function OnboardingPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-neutral-300 mb-2">Weight (kg)</label>
+              <label className="block text-sm font-semibold text-neutral-300 mb-2">
+                Weight (kg)
+              </label>
               <input
                 type="number"
                 value={weight}
@@ -107,7 +137,9 @@ export default function OnboardingPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-neutral-300 mb-2">Handedness</label>
+              <label className="block text-sm font-semibold text-neutral-300 mb-2">
+                Handedness
+              </label>
               <select
                 value={hand}
                 onChange={(e) => setHand(e.target.value)}
@@ -119,7 +151,9 @@ export default function OnboardingPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-neutral-300 mb-2">Gender</label>
+              <label className="block text-sm font-semibold text-neutral-300 mb-2">
+                Gender
+              </label>
               <select
                 value={gender}
                 onChange={(e) => setGender(e.target.value)}
@@ -137,7 +171,9 @@ export default function OnboardingPage() {
               <label className="block text-sm font-semibold text-neutral-300 uppercase tracking-wider">
                 Current UTR
               </label>
-              <span className="text-2xl font-bold text-green-400">{utr.toFixed(1)}</span>
+              <span className="text-2xl font-bold text-green-400">
+                {utr.toFixed(1)}
+              </span>
             </div>
             <input
               type="range"
@@ -162,7 +198,6 @@ export default function OnboardingPage() {
             {loading ? "Saving Profile..." : "Enter Dashboard →"}
           </button>
         </form>
-
       </div>
     </div>
   );

@@ -1,188 +1,513 @@
 "use client";
-
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import RacquetVisualizer from "./RacquetVisualizer";
-
-const MODELS = [
-  { name: "Wilson Blade 98 (16x19 v9)", color: "#16a34a", baseWeight: 305, baseBalance: 32.0, baseSW: 320 },
-  { name: "Wilson Blade 98 (18x20 v9)", color: "#15803d", baseWeight: 305, baseBalance: 32.0, baseSW: 325 },
-  { name: "Babolat Pure Aero 98", color: "#eab308", baseWeight: 305, baseBalance: 31.5, baseSW: 320 },
-  { name: "Babolat Pure Aero", color: "#facc15", baseWeight: 300, baseBalance: 32.0, baseSW: 322 },
-  { name: "Yonex EZONE 98", color: "#2563eb", baseWeight: 305, baseBalance: 31.5, baseSW: 318 },
-  { name: "Yonex EZONE 100", color: "#3b82f6", baseWeight: 300, baseBalance: 32.0, baseSW: 315 },
-  { name: "Head Speed MP", color: "#ffffff", baseWeight: 300, baseBalance: 32.0, baseSW: 320 },
-  { name: "Head Speed Pro", color: "#000000", baseWeight: 310, baseBalance: 31.5, baseSW: 326 },
-  { name: "Babolat Pure Drive", color: "#1d4ed8", baseWeight: 300, baseBalance: 32.0, baseSW: 320 },
-  { name: "Yonex VCORE 98", color: "#dc2626", baseWeight: 305, baseBalance: 32.0, baseSW: 325 },
-  { name: "Yonex VCORE 100", color: "#ef4444", baseWeight: 300, baseBalance: 32.0, baseSW: 321 },
-  { name: "Babolat Pure Strike 98 (16x19)", color: "#ea580c", baseWeight: 305, baseBalance: 32.0, baseSW: 324 },
-  { name: "Wilson Pro Staff 97 v14", color: "#991b1b", baseWeight: 315, baseBalance: 31.0, baseSW: 321 },
-  { name: "Head Radical MP", color: "#f97316", baseWeight: 300, baseBalance: 32.0, baseSW: 320 },
-  { name: "Head Extreme MP", color: "#a3e635", baseWeight: 300, baseBalance: 32.0, baseSW: 318 },
-  { name: "Head Gravity MP", color: "#06b6d4", baseWeight: 295, baseBalance: 32.5, baseSW: 319 },
-  { name: "Head Gravity Pro", color: "#0891b2", baseWeight: 315, baseBalance: 31.5, baseSW: 332 },
-  { name: "Tecnifibre TFight ISO 305", color: "#38bdf8", baseWeight: 305, baseBalance: 32.5, baseSW: 333 },
-  { name: "Yonex Percept 97", color: "#0f766e", baseWeight: 310, baseBalance: 31.0, baseSW: 316 },
-  { name: "Wilson Shift 99 (300g)", color: "#94a3b8", baseWeight: 300, baseBalance: 31.5, baseSW: 317 },
-];
-
+import Icon from "./Icons";
+import {
+  MODELS,
+  Setup,
+  newSetup,
+  calculateSetup,
+  balanceLabel,
+  isSetup,
+} from "@/lib/baseline/racquet";
+import { downloadJson } from "@/lib/baseline/data";
+import { useLocalData } from "@/lib/baseline/useLocalData";
+const validSetups = (v: unknown): v is Setup[] =>
+  Array.isArray(v) && v.every(isSetup);
 export default function RacquetLab() {
-  const [selectedModel, setSelectedModel] = useState(MODELS[0]);
-  const [overgrips, setOvergrips] = useState(1);
-  const [hasLeatherGrip, setHasLeatherGrip] = useState(false);
-
-  const [lead12, setLead12] = useState(0);
-  const [lead39, setLead39] = useState(0);
-  const [leadThroat, setLeadThroat] = useState(0);
-  const [tailWeight, setTailWeight] = useState(0);
-  const [stringWeight, setStringWeight] = useState(0);
-
-  const OVERGRIP_PER = 5.5;
-  const LEATHER_WT = 10;
-
-  const DIST_12 = 68;
-  const DIST_39 = 54;
-  const DIST_THROAT = 33;
-  const DIST_HANDLE = 7;
-  const DIST_STRINGS = 53;
-  const DIST_OVERGRIP = 10;
-
-  const parseGramInput = (value: string): number => {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? Math.max(0, parsed) : 0;
+  const [setup, setSetup] = useState<Setup>(newSetup);
+  const saved = useLocalData<Setup[]>("baseline_setups_v2", [], validSetups);
+  const [compareId, setCompareId] = useState("");
+  const [message, setMessage] = useState("");
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("baseline_setup_draft_v2");
+      if (raw) {
+        const v = JSON.parse(raw);
+        if (isSetup(v)) setSetup(v);
+      }
+    } catch {}
+    setReady(true);
+  }, []);
+  useEffect(() => {
+    if (ready && isSetup(setup)) {
+      try {
+        localStorage.setItem("baseline_setup_draft_v2", JSON.stringify(setup));
+      } catch {}
+    }
+  }, [setup, ready]);
+  const update = (patch: Partial<Setup>) => {
+    setSetup((s) => ({ ...s, ...patch }));
+    setMessage("");
   };
-
-  const overgripTotalWeight = overgrips * OVERGRIP_PER;
-  const leatherMass = hasLeatherGrip ? LEATHER_WT : 0;
-
-  const totalAddedMass = overgripTotalWeight + leatherMass + lead12 + lead39 + leadThroat + tailWeight + stringWeight;
-  const finalWeight = Math.max(1, selectedModel.baseWeight + totalAddedMass);
-
-  const baseMoment = selectedModel.baseWeight * selectedModel.baseBalance;
-  const addedMoment = (lead12 * DIST_12) + (lead39 * DIST_39) + (leadThroat * DIST_THROAT) + ((leatherMass + tailWeight) * DIST_HANDLE) + (overgripTotalWeight * DIST_OVERGRIP) + (stringWeight * DIST_STRINGS);
-  const finalBalance = (baseMoment + addedMoment) / finalWeight;
-
-  const calcSWShift = (mass: number, dist: number) => mass * Math.pow(dist - 10, 2) / 1000;
-
-  const swShift = calcSWShift(lead12, DIST_12) +
-                  calcSWShift(lead39, DIST_39) +
-                  calcSWShift(leadThroat, DIST_THROAT) +
-                  calcSWShift(leatherMass + tailWeight, DIST_HANDLE) +
-                  calcSWShift(overgripTotalWeight, DIST_OVERGRIP) +
-                  calcSWShift(stringWeight, DIST_STRINGS);
-
-  const finalSW = selectedModel.baseSW + swShift;
-
-  const balancePercent = Math.max(0, Math.min(100, ((finalBalance - 30) / (35 - 30)) * 100));
-
+  const result = calculateSetup(setup);
+  const comparison = saved.value.find((s) => s.id === compareId);
+  const compared = comparison ? calculateSetup(comparison) : null;
+  const valid = isSetup(setup);
+  const number = (
+    key: keyof Setup,
+    label: string,
+    min: number,
+    max: number,
+    step = 0.5,
+    help?: string,
+  ) => (
+    <label className="field">
+      {label}
+      <input
+        type="number"
+        min={min}
+        max={max}
+        step={step}
+        value={setup[key] as number}
+        onChange={(e) => update({ [key]: Number(e.target.value) })}
+      />
+      {help && <small>{help}</small>}
+    </label>
+  );
+  const save = () => {
+    if (!valid || !setup.name.trim()) {
+      setMessage("Enter a setup name and valid starting specs.");
+      return;
+    }
+    const item = {
+      ...setup,
+      id: setup.id || crypto.randomUUID(),
+      name: setup.name.trim(),
+    };
+    if (
+      saved.save((current) => [
+        ...current.filter((s) => s.id !== item.id),
+        item,
+      ])
+    ) {
+      setSetup(item);
+      setMessage("Setup saved on this device.");
+    }
+  };
   return (
-    <div className="flex flex-col lg:flex-row gap-8 overflow-hidden">
-      <div className="w-full lg:w-5/12 space-y-6">
-        <h3 className="text-xl font-bold text-white">Frame Visualizer</h3>
+    <div className="lab-layout">
+      <div className="lab-visual panel">
+        <div className="eyebrow">YOUR FRAME / LIVE ESTIMATE</div>
+        <h2>{setup.model === "Custom frame" ? setup.name : setup.model}</h2>
         <RacquetVisualizer
-          frameColor={selectedModel.color}
-          leatherGrip={hasLeatherGrip}
-          lead12={lead12}
-          lead39={lead39}
-          leadThroat={leadThroat}
+          frameColor={setup.color}
+          leatherGrip={setup.leather > 0}
+          lead12={setup.lead12}
+          lead39={setup.lead39}
+          leadThroat={setup.throat}
         />
-
-        <div className="bg-neutral-900 border border-neutral-800 p-6 rounded-xl">
-          <div className="flex justify-between text-xs font-bold text-neutral-400 mb-2 uppercase tracking-wider">
-            <span>Head Light (HL)</span>
-            <span>Head Heavy (HH)</span>
-          </div>
-          <div className="relative h-2 bg-neutral-800 rounded-full w-full">
-            <div className="absolute top-0 bottom-0 w-px bg-neutral-600 left-[85.8%] z-0" />
-            <div
-              className="absolute top-1/2 -translate-y-1/2 w-4 h-4 bg-lime-400 rounded-full shadow-[0_0_10px_rgba(163,230,53,0.5)] z-10 transition-all duration-500"
-              style={{ left: `calc(${balancePercent}% - 8px)` }}
-            />
-          </div>
-          <p className="text-center text-lime-400 font-mono text-sm mt-3">{finalBalance.toFixed(2)} cm</p>
+        <div className="balance-readout">
+          <span>HEAD LIGHT</span>
+          <b>{valid ? balanceLabel(result.hl) : "Check inputs"}</b>
+          <span>HEAD HEAVY</span>
         </div>
+        <div className="balance-track">
+          <i
+            style={{
+              left: `${Math.max(0, Math.min(100, 50 + (result.balance - setup.length / 2) * 7))}%`,
+            }}
+          />
+          <span />
+        </div>
+        <div className="lab-note">
+          Your real racket can differ from catalog specs. Use a scale and
+          balance measurement to improve these estimates.
+        </div>
+        <details className="method-note">
+          <summary>How the estimates work</summary>
+          <p>
+            Weight and balance use added mass and its distance from the butt.
+            Swingweight change uses ΔSW = mass (kg) × (distance − 10 cm)². Each
+            addition is a point-mass approximation; strings and grips are
+            distributed in reality. Twistweight and stiffness are not estimated.
+          </p>
+          <p>
+            Starter catalog values are unstrung estimates carried over from the
+            original app; model years and individual frames vary. Check your
+            exact model before comparing. Only enter a starting swingweight
+            measured in the same condition as the starting weight and balance.
+          </p>
+          <a
+            href="https://twu.tennis-warehouse.com/learning_center/customizationReverse.php"
+            target="_blank"
+            rel="noreferrer"
+          >
+            Tennis Warehouse University methodology ↗
+          </a>
+        </details>
       </div>
-
-      <div className="w-full lg:w-7/12 flex flex-col gap-6">
-        <div className="grid grid-cols-3 gap-4 bg-neutral-900 border border-neutral-800 p-6 rounded-xl">
+      <div className="lab-controls">
+        <div className="lab-stats" aria-live="polite">
           <div>
-            <p className="text-sm text-neutral-400">Weight</p>
-            <p className="text-3xl font-bold text-white">{Math.round(finalWeight)}g</p>
-            <p className="text-xs text-neutral-500 mt-1">Base: {selectedModel.baseWeight}g</p>
+            <span>Estimated weight</span>
+            <strong>
+              {valid ? result.weight.toFixed(1) : "—"}
+              <small> g</small>
+            </strong>
+            <em>+{result.added.toFixed(1)} g added</em>
           </div>
           <div>
-            <p className="text-sm text-neutral-400">Balance</p>
-            <p className="text-3xl font-bold text-white">{finalBalance.toFixed(1)}<span className="text-xl">cm</span></p>
-            <p className="text-xs text-neutral-500 mt-1">Base: {selectedModel.baseBalance}cm</p>
+            <span>Estimated balance</span>
+            <strong>
+              {valid ? result.balance.toFixed(2) : "—"}
+              <small> cm</small>
+            </strong>
+            <em>From the butt cap</em>
           </div>
           <div>
-            <p className="text-sm text-neutral-400">Swingweight</p>
-            <p className="text-3xl font-bold text-lime-400">{Math.round(finalSW)}</p>
-            <p className="text-xs text-neutral-500 mt-1">Base: {selectedModel.baseSW}</p>
+            <span>
+              {result.swingweight === null
+                ? "Swingweight change"
+                : "Estimated swingweight"}
+            </span>
+            <strong className="lime">
+              {valid
+                ? result.swingweight === null
+                  ? "+" + result.swChange.toFixed(1)
+                  : result.swingweight.toFixed(1)
+                : "—"}
+            </strong>
+            <em>
+              {result.swingweight === null
+                ? "kg·cm² · baseline unknown"
+                : "kg·cm² · 10 cm axis"}
+            </em>
           </div>
         </div>
-
-        <div className="bg-neutral-900 border border-neutral-800 p-6 rounded-xl space-y-6">
-          <div>
-            <label className="text-sm font-bold text-white">Base Frame</label>
+        <section className="panel">
+          <div className="section-heading">
+            <h3>
+              <span className="step-number">01</span> Starting racket
+            </h3>
+            <span className="badge">EDITABLE SPECS</span>
+          </div>
+          <label className="field">
+            Frame model
             <select
-              className="w-full mt-2 bg-neutral-950 border border-neutral-800 text-white p-3 rounded-lg focus:ring-lime-400 focus:border-lime-400 outline-none"
+              value={setup.model}
               onChange={(e) => {
-                const model = MODELS.find((m) => m.name === e.target.value);
-                if (model) setSelectedModel(model);
+                const m = MODELS.find((m) => m.name === e.target.value);
+                update(
+                  m
+                    ? {
+                        model: m.name,
+                        color: m.color,
+                        baseWeight: m.baseWeight,
+                        baseBalance: m.baseBalance,
+                        baseSW: null,
+                        condition: "unstrung",
+                        strings: 16,
+                        length: 68.58,
+                        id: "",
+                        name: m.name.split(" (")[0] + " setup",
+                      }
+                    : { model: "Custom frame", id: "", name: "Custom setup" },
+                );
               }}
             >
-              {MODELS.map((model) => (
-                <option key={model.name} value={model.name}>{model.name}</option>
+              {MODELS.map((m) => (
+                <option key={m.name}>{m.name}</option>
               ))}
+              <option>Custom frame</option>
             </select>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4 border-t border-neutral-800 pt-6 items-center">
-            <div className="flex items-center gap-3">
-              <label className="text-white text-sm">Overgrips</label>
-              <select value={overgrips} onChange={(e) => setOvergrips(Number(e.target.value))} className="bg-neutral-950 border border-neutral-800 text-white p-2 rounded">
-                <option value={0}>0</option>
-                <option value={1}>1</option>
-                <option value={2}>2</option>
+          </label>
+          <div className="form-grid mt-4">
+            <label className="field">
+              Starting condition
+              <select
+                value={setup.condition}
+                onChange={(e) => {
+                  const condition = e.target.value as Setup["condition"];
+                  update({
+                    condition,
+                    strings: condition === "ready" ? 0 : 16,
+                    baseSW: null,
+                  });
+                }}
+              >
+                <option value="unstrung">Unstrung frame</option>
+                <option value="ready">Already strung / measured setup</option>
               </select>
-              <span className="text-xs text-neutral-500">5.5g each</span>
-            </div>
-            <label className="flex items-center space-x-3 cursor-pointer">
-              <input type="checkbox" checked={hasLeatherGrip} onChange={(e) => setHasLeatherGrip(e.target.checked)} className="w-5 h-5 rounded border-neutral-700 text-lime-400 bg-neutral-950" />
-              <span className="text-white text-sm">Leather Grip (+10g)</span>
+            </label>
+            {number("length", "Length (cm)", 50, 80, 0.01)}
+          </div>
+          <p className="helper">
+            {setup.condition === "ready"
+              ? "Enter the weight and balance of your complete starting racket below. Add only accessories not already included."
+              : "Starting specs include the factory grip, but no strings. The additions below are counted separately."}
+          </p>
+          <div className="form-grid three">
+            {number("baseWeight", "Starting weight (g)", 100, 600, 0.1)}
+            {number(
+              "baseBalance",
+              "Starting balance (cm)",
+              1,
+              setup.length,
+              0.01,
+            )}
+            <label className="field">
+              Starting SW (optional)
+              <input
+                type="number"
+                min="0"
+                max="800"
+                step=".1"
+                placeholder="Unknown"
+                value={setup.baseSW ?? ""}
+                onChange={(e) =>
+                  update({
+                    baseSW:
+                      e.target.value === "" ? null : Number(e.target.value),
+                  })
+                }
+              />
             </label>
           </div>
-
-          <div className="space-y-4 border-t border-neutral-800 pt-6">
-            <h4 className="text-sm font-bold text-white mb-4">Mass Distribution (Lead / Tungsten)</h4>
-
-            <div className="flex items-center justify-between">
-              <label className="text-sm text-neutral-400">12 o'clock (Tip)</label>
-              <input type="number" min="0" step="0.5" value={lead12} onChange={(e) => setLead12(parseGramInput(e.target.value))} className="w-24 bg-neutral-950 border border-neutral-800 text-white p-2 rounded text-center" />
-            </div>
-
-            <div className="flex items-center justify-between">
-              <label className="text-sm text-neutral-400">3 & 9 o'clock (Sides)</label>
-              <input type="number" min="0" step="0.5" value={lead39} onChange={(e) => setLead39(parseGramInput(e.target.value))} className="w-24 bg-neutral-950 border border-neutral-800 text-white p-2 rounded text-center" />
-            </div>
-
-            <div className="flex items-center justify-between">
-              <label className="text-sm text-neutral-400">Throat Bridge</label>
-              <input type="number" min="0" step="0.5" value={leadThroat} onChange={(e) => setLeadThroat(parseGramInput(e.target.value))} className="w-24 bg-neutral-950 border border-neutral-800 text-white p-2 rounded text-center" />
-            </div>
-
-            <div className="flex items-center justify-between">
-              <label className="text-sm text-neutral-400">Butt Cap (Silicone/Putty)</label>
-              <input type="number" min="0" step="0.5" value={tailWeight} onChange={(e) => setTailWeight(parseGramInput(e.target.value))} className="w-24 bg-neutral-950 border border-neutral-800 text-white p-2 rounded text-center" />
-            </div>
-            
-            <div className="flex items-center justify-between">
-              <label className="text-sm text-neutral-400">String Weight</label>
-              <input type="number" min="0" step="0.5" value={stringWeight} onChange={(e) => setStringWeight(parseGramInput(e.target.value))} className="w-24 bg-neutral-950 border border-neutral-800 text-white p-2 rounded text-center" />
-            </div>
+        </section>
+        <section className="panel">
+          <div className="section-heading">
+            <h3>
+              <span className="step-number">02</span> Customize the feel
+            </h3>
+            <button
+              className="text-button"
+              onClick={() =>
+                update({
+                  lead12: 0,
+                  lead39: 0,
+                  throat: 0,
+                  butt: 0,
+                  leather: 0,
+                  overgrips: 0,
+                  strings: 0,
+                })
+              }
+            >
+              Clear additions
+            </button>
           </div>
-        </div>
+          <div className="addition-grid">
+            {number(
+              "lead12",
+              "12 o’clock · tip (g)",
+              0,
+              100,
+              0.5,
+              "More weight far from the hand has a larger SW effect.",
+            )}
+            {number(
+              "lead39",
+              "3 + 9 o’clock · total (g)",
+              0,
+              100,
+              0.5,
+              "Combined mass: split equally between both sides.",
+            )}
+            {number("throat", "Throat (g)", 0, 100, 0.5)}
+            {number("butt", "Inside butt cap (g)", 0, 100, 0.5)}
+            {number(
+              "overgrips",
+              "Extra overgrips",
+              0,
+              5,
+              1,
+              "5.5 g each, approximate.",
+            )}
+            {number(
+              "leather",
+              "Grip replacement · net added (g)",
+              0,
+              100,
+              0.5,
+              "New grip weight minus the removed grip weight.",
+            )}
+            {number(
+              "strings",
+              "Additional string mass (g)",
+              0,
+              40,
+              0.5,
+              "Use 0 if strings are included in the starting specs.",
+            )}
+          </div>
+        </section>
+        <section className="panel">
+          <div className="section-heading">
+            <h3>
+              <span className="step-number">03</span> Save & compare
+            </h3>
+            <span className="badge">{saved.value.length} SAVED</span>
+          </div>
+          <div className="form-grid">
+            <label className="field">
+              Setup name
+              <input
+                maxLength={80}
+                value={setup.name}
+                onChange={(e) => update({ name: e.target.value })}
+                placeholder="Match day / 2 g at 12"
+              />
+            </label>
+            <label className="field">
+              Strings & gauge
+              <input
+                maxLength={100}
+                value={setup.stringName}
+                onChange={(e) => update({ stringName: e.target.value })}
+                placeholder="e.g. Tour Bite 1.25"
+              />
+            </label>
+          </div>
+          <div className="form-grid mt-4">
+            <label className="field">
+              Tension (include unit)
+              <input
+                value={setup.tension}
+                maxLength={60}
+                onChange={(e) => update({ tension: e.target.value })}
+                placeholder="e.g. 23 / 22 kg"
+              />
+            </label>
+            <label className="field">
+              On-court notes
+              <input
+                value={setup.notes}
+                maxLength={500}
+                onChange={(e) => update({ notes: e.target.value })}
+                placeholder="What changed in the feel?"
+              />
+            </label>
+          </div>
+          <div className="button-row">
+            <button
+              className="button primary"
+              disabled={!valid || !saved.ready || !!saved.error}
+              onClick={save}
+            >
+              <Icon name="check" />
+              {setup.id ? "Update setup" : "Save setup"}
+            </button>
+            <button
+              className="button"
+              disabled={!valid}
+              onClick={() => {
+                setSetup({ ...setup, id: "", name: setup.name + " copy" });
+                setMessage("Copy ready. Give it a name and save.");
+              }}
+            >
+              Make a copy
+            </button>
+            <button
+              className="button"
+              disabled={!valid}
+              onClick={() =>
+                downloadJson("baseline-racket-setup.json", {
+                  setup,
+                  estimates: result,
+                  method: "Point-mass estimate; 10 cm swingweight axis",
+                })
+              }
+            >
+              <Icon name="download" />
+              Export specs
+            </button>
+          </div>
+          {(message || saved.error || !valid) && (
+            <p role="status" className="notice">
+              {saved.error ||
+                (!valid
+                  ? "Check the starting specs and additions: values must be within the shown limits."
+                  : message)}
+            </p>
+          )}
+          {saved.value.length > 0 && (
+            <>
+              <div className="form-grid mt-4">
+                <label className="field">
+                  Load saved setup
+                  <select
+                    value={setup.id}
+                    onChange={(e) => {
+                      const s = saved.value.find(
+                        (s) => s.id === e.target.value,
+                      );
+                      if (s) {
+                        setSetup(s);
+                        setMessage("Saved setup loaded.");
+                      }
+                    }}
+                  >
+                    <option value="">Choose a saved setup</option>
+                    {saved.value.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="field">
+                  Compare current setup with
+                  <select
+                    value={compareId}
+                    onChange={(e) => setCompareId(e.target.value)}
+                  >
+                    <option value="">Choose a comparison</option>
+                    {saved.value.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              {comparison && compared && valid && (
+                <div className="table-wrap">
+                  <table>
+                    <caption>
+                      Current setup compared with {comparison.name}
+                    </caption>
+                    <thead>
+                      <tr>
+                        <th>Spec</th>
+                        <th>Current</th>
+                        <th>Saved</th>
+                        <th>Difference</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {[
+                        ["Weight (g)", result.weight, compared.weight],
+                        ["Balance (cm)", result.balance, compared.balance],
+                        [
+                          "Swingweight",
+                          result.swingweight,
+                          compared.swingweight,
+                        ],
+                      ].map(([label, a, b]) => (
+                        <tr key={String(label)}>
+                          <th>{label}</th>
+                          <td>
+                            {a === null ? "Unknown" : Number(a).toFixed(1)}
+                          </td>
+                          <td>
+                            {b === null ? "Unknown" : Number(b).toFixed(1)}
+                          </td>
+                          <td>
+                            {a === null || b === null
+                              ? "—"
+                              : `${Number(a) - Number(b) >= 0 ? "+" : ""}${(Number(a) - Number(b)).toFixed(1)}`}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </>
+          )}
+        </section>
       </div>
     </div>
   );

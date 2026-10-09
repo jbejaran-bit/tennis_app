@@ -1,206 +1,201 @@
 "use client";
-
-import React, { useEffect, useRef, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
-
+import { useEffect, useRef, useState } from "react";
+import { saveVideo } from "@/lib/baseline/videos";
+import Icon from "./Icons";
 type Props = {
   onRecorded?: (blob: Blob) => void;
   lessonTitle?: string;
+  onSaved?: () => void;
 };
-
-export default function StrokeRecorder({ onRecorded, lessonTitle }: Props) {
-  const supabase = createClient();
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const streamRef = useRef<MediaStream | null>(null);
+export default function StrokeRecorder({
+  onRecorded,
+  lessonTitle,
+  onSaved,
+}: Props) {
+  const preview = useRef<HTMLVideoElement>(null);
+  const stream = useRef<MediaStream | null>(null);
+  const recorder = useRef<MediaRecorder | null>(null);
+  const chunks = useRef<Blob[]>([]);
+  const mounted = useRef(true);
   const [recording, setRecording] = useState(false);
-  const [recordedUrl, setRecordedUrl] = useState<string | null>(null);
-  const [uploading, setUploading] = useState(false);
-  const [uploadUrl, setUploadUrl] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const recordedChunksRef = useRef<BlobPart[]>([]);
-
+  const [starting, setStarting] = useState(false);
+  const [blob, setBlob] = useState<Blob | null>(null);
+  const [url, setUrl] = useState("");
+  const [error, setError] = useState("");
+  const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
   useEffect(() => {
+    mounted.current = true;
     return () => {
-      // Cleanup stream and object URLs on unmount
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach((t) => t.stop());
-      }
-      if (recordedUrl) URL.revokeObjectURL(recordedUrl);
+      mounted.current = false;
+      stream.current?.getTracks().forEach((t) => t.stop());
+      if (recorder.current?.state === "recording") recorder.current.stop();
     };
-  }, [recordedUrl]);
-
-  async function startRecording() {
-    setError(null);
+  }, []);
+  useEffect(() => {
+    if (!blob) {
+      setUrl("");
+      return;
+    }
+    const u = URL.createObjectURL(blob);
+    setUrl(u);
+    return () => URL.revokeObjectURL(u);
+  }, [blob]);
+  useEffect(() => {
+    if (recording && preview.current && stream.current) {
+      preview.current.srcObject = stream.current;
+      preview.current.play().catch(() => {});
+    }
+  }, [recording]);
+  async function start() {
+    setError("");
+    setStarting(true);
+    setSaved(false);
+    setBlob(null);
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-      streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        videoRef.current.muted = true;
-        await videoRef.current.play();
+      if (
+        !navigator.mediaDevices?.getUserMedia ||
+        typeof MediaRecorder === "undefined"
+      )
+        throw new Error(
+          "Recording is not supported here. Use your phone camera and add the clip instead.",
+        );
+      const s = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "environment" },
+        audio: false,
+      });
+      if (!mounted.current) {
+        s.getTracks().forEach((t) => t.stop());
+        return;
       }
-
-      recordedChunksRef.current = [];
-      const options: MediaRecorderOptions = { mimeType: "video/webm;codecs=vp9" };
-      let recorder: MediaRecorder;
-      try {
-        recorder = new MediaRecorder(stream, options);
-      } catch (e) {
-        recorder = new MediaRecorder(stream);
-      }
-
-      mediaRecorderRef.current = recorder;
-      recorder.ondataavailable = (ev) => {
-        if (ev.data && ev.data.size > 0) recordedChunksRef.current.push(ev.data);
+      stream.current = s;
+      const mime = [
+        "video/webm;codecs=vp9",
+        "video/webm;codecs=vp8",
+        "video/mp4",
+      ].find((t) => MediaRecorder.isTypeSupported(t));
+      const r = new MediaRecorder(s, mime ? { mimeType: mime } : undefined);
+      recorder.current = r;
+      chunks.current = [];
+      r.ondataavailable = (e) => {
+        if (e.data.size) chunks.current.push(e.data);
       };
-      recorder.onstop = () => {
-        const blob = new Blob(recordedChunksRef.current, { type: "video/webm" });
-        const url = URL.createObjectURL(blob);
-        setRecordedUrl(url);
-        if (onRecorded) onRecorded(blob);
-        // stop camera tracks
-        if (streamRef.current) streamRef.current.getTracks().forEach((t) => t.stop());
-        streamRef.current = null;
-
-        // Start upload to Supabase Storage in background
-        (async () => {
-          try {
-            setUploading(true);
-            setUploadUrl(null);
-            // determine user id if available
-            let userId = "anonymous";
-            try {
-              const { data } = await supabase.auth.getUser();
-              if (data?.user?.id) userId = data.user.id;
-            } catch (e) {
-              // ignore
-            }
-
-            const path = `${userId}/${Date.now()}.webm`;
-            const { error: upErr } = await supabase.storage.from("stroke-videos").upload(path, blob, {
-              cacheControl: "3600",
-              upsert: false,
-              contentType: blob.type,
-            });
-            if (upErr) {
-              console.error("Supabase upload error", upErr);
-              setError(upErr.message || "Upload failed");
-            } else {
-              // Obtain public URL (works for public buckets)
-              try {
-                const { data: pub } = supabase.storage.from("stroke-videos").getPublicUrl(path);
-                setUploadUrl(pub.publicUrl || null);
-                console.log("Uploaded to storage:", pub.publicUrl);
-                // Insert a metadata record into the `videos` table
-                try {
-                  const lesson = (typeof (arguments[0]) === 'undefined' ? null : null); // placeholder to keep TS happy
-                } catch (e) {}
-                try {
-                  const { error: insertErr } = await supabase.from("videos").insert([
-                    {
-                      user_id: userId,
-                      lesson_title: lessonTitle || null,
-                      storage_url: pub.publicUrl,
-                      created_at: new Date().toISOString(),
-                    },
-                  ]);
-                  if (insertErr) {
-                    console.error('Failed to insert video metadata', insertErr);
-                  } else {
-                    console.log('Saved video metadata to videos table');
-                  }
-                } catch (e) {
-                  console.error('Error inserting video metadata', e);
-                }
-              } catch (e) {
-                console.warn("Could not get public URL", e);
-              }
-            }
-          } catch (e: any) {
-            console.error(e);
-            setError(e?.message || "Upload failed");
-          } finally {
-            setUploading(false);
-          }
-        })();
+      r.onstop = () => {
+        s.getTracks().forEach((t) => t.stop());
+        stream.current = null;
+        if (!mounted.current) return;
+        const video = new Blob(chunks.current, {
+          type: r.mimeType || "video/webm",
+        });
+        setBlob(video);
+        setRecording(false);
+        onRecorded?.(video);
       };
-
-      recorder.start();
+      r.onerror = () => {
+        s.getTracks().forEach((t) => t.stop());
+        if (mounted.current) {
+          setRecording(false);
+          setError(
+            "Recording stopped unexpectedly. Try again or add a clip from your device.",
+          );
+        }
+      };
+      r.start(1000);
       setRecording(true);
-      setRecordedUrl(null);
-    } catch (err: any) {
-      console.error(err);
-      setError(err?.message || "Could not access camera");
+    } catch (e) {
+      stream.current?.getTracks().forEach((t) => t.stop());
+      setError(e instanceof Error ? e.message : "Could not access camera.");
+    } finally {
+      if (mounted.current) setStarting(false);
     }
   }
-
-  function stopRecording() {
+  async function save() {
+    if (!blob) return;
+    setSaving(true);
     try {
-      mediaRecorderRef.current?.stop();
-    } catch (err) {
-      console.error(err);
+      await saveVideo({
+        id: crypto.randomUUID(),
+        title: lessonTitle || "Practice recording",
+        createdAt: new Date().toISOString(),
+        blob,
+        notes: "",
+      });
+      setSaved(true);
+      onSaved?.();
+    } catch {
+      setError("Could not save this clip. Download it to keep a copy.");
+    } finally {
+      setSaving(false);
     }
-    setRecording(false);
   }
-
-  function downloadRecording() {
-    if (!recordedUrl) return;
-    const a = document.createElement("a");
-    a.href = recordedUrl;
-    a.download = `stroke_${Date.now()}.webm`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-  }
-
   return (
-    <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-4 text-green-400">
-      <div className="flex gap-3 mb-3">
-        <button
-          type="button"
-          onClick={startRecording}
-          disabled={recording}
-          className="px-4 py-2 rounded-lg bg-green-500 text-black font-semibold disabled:opacity-50"
-        >
-          Record
-        </button>
-        <button
-          type="button"
-          onClick={stopRecording}
-          disabled={!recording}
-          className="px-4 py-2 rounded-lg border border-neutral-800"
-        >
-          Stop
-        </button>
-        {recordedUrl && !uploading && (
+    <div className="recorder">
+      <div className="recorder-preview">
+        {recording ? (
+          <video ref={preview} muted playsInline autoPlay />
+        ) : url ? (
+          <video src={url} controls playsInline />
+        ) : (
+          <div className="empty-state">
+            <Icon name="video" />
+            <h3>See your next improvement</h3>
+            <p>
+              Record a short clip or add one from your phone. Camera access
+              starts only when you press Record.
+            </p>
+          </div>
+        )}
+      </div>
+      <div className="button-row">
+        {recording ? (
+          <button
+            className="button danger"
+            onClick={() => recorder.current?.stop()}
+          >
+            Stop recording
+          </button>
+        ) : (
+          <button className="button" disabled={starting} onClick={start}>
+            <Icon name="video" />
+            {starting
+              ? "Opening camera…"
+              : url
+                ? "Record again"
+                : "Record a clip"}
+          </button>
+        )}
+        {url && (
           <>
-            <button type="button" onClick={downloadRecording} className="px-3 py-2 rounded-lg border border-neutral-800">
-              Download
+            <button
+              className="button primary"
+              disabled={saved || saving}
+              onClick={save}
+            >
+              {saving
+                ? "Saving…"
+                : saved
+                  ? "Saved to journal"
+                  : "Save to journal"}
             </button>
+            <a
+              className="button"
+              href={url}
+              download={`baseline-recording.${blob?.type.includes("mp4") ? "mp4" : "webm"}`}
+            >
+              Download
+            </a>
           </>
         )}
-        {uploading && (
-          <div className="px-3 py-2 rounded-lg border border-neutral-800 text-xs font-mono text-baseline-text-dim">Uploading...</div>
-        )}
       </div>
-
-      <div className="w-full rounded-md overflow-hidden border border-neutral-800">
-        {/* Live preview while recording; recorded playback when available */}
-        {!recordedUrl ? (
-          <video ref={videoRef} className="w-full h-[320px] bg-black object-cover" />
-        ) : (
-          <video src={recordedUrl} controls className="w-full h-[320px] bg-black object-cover" />
-        )}
-      </div>
-
-      {uploadUrl && (
-        <p className="text-sm text-baseline-text-dim mt-2">
-          Uploaded: <a href={uploadUrl} target="_blank" rel="noreferrer" className="underline text-baseline-green">View</a>
+      <p className="helper">
+        Silent video. Recordings stay on this device unless you download and
+        share them.
+      </p>
+      {error && (
+        <p className="notice" role="alert">
+          {error}
         </p>
       )}
-
-      {error && <p className="text-sm text-red-400 mt-2">{error}</p>}
     </div>
   );
 }

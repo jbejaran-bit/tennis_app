@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Baseline — Tennis Performance Intelligence",
+  title: "Baseline — Your Game, in Focus",
   description:
-    "Track every match. See every pattern. Train with an AI coach that knows your game.",
+    "Customize your racket, keep a match journal, and make your next practice count.",
   keywords: ["tennis", "performance", "tracking", "AI", "coaching", "UTR"],
 };
 
