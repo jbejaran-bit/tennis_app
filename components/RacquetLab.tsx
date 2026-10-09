@@ -480,6 +480,7 @@ export default function RacquetLab() {
                       {[
                         ["Weight (g)", result.weight, compared.weight],
                         ["Balance (cm)", result.balance, compared.balance],
+                        ["Added SW (kg·cm²)", result.swChange, compared.swChange],
                         [
                           "Swingweight",
                           result.swingweight,
@@ -503,6 +504,7 @@ export default function RacquetLab() {
                       ))}
                     </tbody>
                   </table>
+                  <p className="muted">Added SW compares the effect of your additions. It does not compare total swingweight when either starting SW is unknown.</p>
                 </div>
               )}
             </>
