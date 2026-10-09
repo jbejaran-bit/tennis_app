@@ -1,102 +1,80 @@
-import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
-
-export default async function HomePage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (user) {
-    redirect("/dashboard");
-  }
-
+import Icon from "@/components/Icons";
+import "./dashboard/workspace.css";
+export default function HomePage() {
   return (
-    <main className="relative min-h-screen bg-baseline-dark overflow-hidden flex flex-col">
-      {/* Background grid */}
-      <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff06_1px,transparent_1px),linear-gradient(to_bottom,#ffffff06_1px,transparent_1px)] bg-[size:48px_48px]" />
-      {/* Gradient blob */}
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[400px] bg-baseline-green/5 blur-[120px] rounded-full pointer-events-none" />
-
-      <nav className="relative z-10 flex items-center justify-between px-6 md:px-12 py-6">
-        <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-md baseline-gradient flex items-center justify-center">
-            <span className="text-xs font-bold text-baseline-dark">B</span>
-          </div>
-          <span className="font-display text-lg font-bold tracking-tight text-baseline-text-primary">
-            Baseline
+    <div className="baseline-workspace landing">
+      <nav className="landing-nav">
+        <Link href="/" className="brand">
+          <span className="brand-symbol">
+            b<span>•</span>
           </span>
-        </div>
-        <div className="flex items-center gap-4">
-          <Link
-            href="/auth/login"
-            className="text-sm text-baseline-text-secondary hover:text-baseline-text-primary transition-colors"
-          >
+          <span>
+            baseline<small>YOUR GAME, IN FOCUS</small>
+          </span>
+        </Link>
+        <div className="button-row">
+          <Link className="text-button" href="/auth/login">
             Sign in
           </Link>
-          <Link
-            href="/auth/register"
-            className="inline-flex items-center gap-1.5 rounded-lg bg-baseline-green px-4 py-2 text-sm font-semibold text-baseline-dark hover:bg-baseline-green-dim transition-colors"
-          >
-            Get started
+          <Link className="button primary" href="/dashboard">
+            Open workspace <Icon name="arrow" />
           </Link>
         </div>
       </nav>
-
-      <div className="relative z-10 flex flex-1 flex-col items-center justify-center px-6 text-center pt-16 pb-32">
-        <div className="inline-flex items-center gap-2 rounded-full border border-baseline-border bg-baseline-dark-3 px-4 py-1.5 mb-8">
-          <div className="w-1.5 h-1.5 rounded-full bg-baseline-green animate-pulse-glow" />
-          <span className="text-xs text-baseline-text-secondary font-mono">
-            Varsity-Grade Performance Diagnostics
-          </span>
-        </div>
-
-        <h1 className="text-4xl md:text-6xl font-bold text-white tracking-tight">
-          Play the match. <span className="text-lime-400">We track the data.</span>
+      <main className="landing-main">
+        <div className="eyebrow">BUILT FOR THE TIME BETWEEN MATCHES</div>
+        <h1>
+          Small details.
+          <br />
+          <em>A different game.</em>
         </h1>
-
-        <p className="mt-4 text-lg text-neutral-400 max-w-xl">
-          Log your match stats and analyze your mechanics. Baseline turns your on-court performance into actionable, tactical insights to elevate your game.
+        <p>
+          Your racket setup, your match notes, your next practice.
+          <br />
+          One place to turn what you notice into what you work on.
         </p>
-
-        <div className="flex items-center gap-4 flex-wrap justify-center">
-          <Link
-            href="/auth/register"
-            className="inline-flex items-center gap-2 rounded-lg bg-baseline-green px-6 py-3 text-base font-semibold text-baseline-dark hover:bg-baseline-green-dim transition-all hover:shadow-[0_0_24px_rgba(200,241,94,0.3)]"
-          >
-            Start tracking free
+        <div className="button-row">
+          <Link className="button primary" href="/dashboard#racquet-lab">
+            Explore Racket Lab <Icon name="arrow" />
           </Link>
-          <Link
-            href="/auth/login"
-            className="inline-flex items-center gap-2 rounded-lg border border-baseline-border bg-baseline-dark-3 px-6 py-3 text-base font-semibold text-baseline-text-secondary hover:text-baseline-text-primary hover:border-baseline-border/60 transition-colors"
-          >
-            Sign in
+          <Link className="button" href="/dashboard">
+            Open your workspace
           </Link>
         </div>
-
-        {/* Feature pills */}
-        <div className="mt-20 flex flex-wrap gap-3 justify-center max-w-2xl">
+        <div className="landing-features">
           {[
-            "Tactical Match Debriefs",
-            "Stroke Biomechanics",
-            "Surface-Specific Win Rates",
-            "Kinematic Serve Trends",
-            "Longitudinal UTR Tracking",
-            "Momentum Shift Analysis",
+            {
+              icon: "racket" as const,
+              title: "Find your feel",
+              copy: "Model weight changes, save setups and compare your rackets. Clear estimates, with or without a known swingweight.",
+            },
+            {
+              icon: "matches" as const,
+              title: "Remember the pattern",
+              copy: "Record the score and what you learned. See your own match history without filling in stats you did not track.",
+            },
+            {
+              icon: "training" as const,
+              title: "Practice with a target",
+              copy: "Choose a solo, partner or wall drill. Track the session, review a clip, and carry one cue onto court.",
+            },
           ].map((f) => (
-            <span
-              key={f}
-              className="rounded-full border border-baseline-border bg-baseline-dark-3 px-3 py-1.5 text-xs text-baseline-text-secondary font-mono"
-            >
-              {f}
-            </span>
+            <article className="panel" key={f.title}>
+              <Icon name={f.icon} />
+              <h2>{f.title}</h2>
+              <p>{f.copy}</p>
+            </article>
           ))}
         </div>
-      </div>
-
-      {/* Bottom fade */}
-      <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-baseline-dark to-transparent pointer-events-none" />
-    </main>
+        <p className="helper">
+          Start without an account. Logs, setups and new videos are saved in
+          your browser. Export backups to keep a copy.
+        </p>
+      </main>
+      <footer className="landing-footer">
+        baseline · Your game, in focus.
+      </footer>
+    </div>
   );
 }
