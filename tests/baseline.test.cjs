@@ -217,3 +217,30 @@ test('Archive survives backup serialization; shared setups open active', () => {
   assert.ok(isSetup(JSON.parse(JSON.stringify(archived))));
   assert.equal(readSharedSetup(shareSetupHash(archived)).archived,false);
 });
+
+test("Target planner reconstructs known tip and butt additions without changing the source", () => {
+  const { planTarget } = load("lib/baseline/racquet.ts");
+  const s = { ...newSetup(), lead12: 2, butt: 3, baseSW: 290 };
+  const target = calculateSetup({ ...s, lead12: 5, butt: 10 });
+  const p = planTarget(s, target.weight, target.balance);
+  assert.equal(p.ok, true);
+  close(p.tip, 3); close(p.butt, 7);
+  close(p.result.weight, target.weight); close(p.result.balance, target.balance);
+  close(p.result.swingweight, target.swingweight);
+  assert.equal(s.lead12, 2);
+});
+test("Target planner rejects removal, impossible balance, nonfinite inputs and oversized additions", () => {
+  const { planTarget } = load("lib/baseline/racquet.ts");
+  const s = newSetup();
+  const c = calculateSetup(s);
+  for (const [w,b] of [[c.weight-1,c.balance],[c.weight,40],[NaN,32],[340,Infinity],[1000,32]]) {
+    assert.equal(planTarget(s,w,b).ok,false);
+  }
+});
+test("Target planner handles an already reached target and preserves unknown swingweight", () => {
+  const { planTarget } = load("lib/baseline/racquet.ts");
+  const s = newSetup(); const c = calculateSetup(s);
+  const p = planTarget(s,c.weight,c.balance);
+  assert.equal(p.ok,true); close(p.tip,0); close(p.butt,0);
+  assert.equal(p.result.swingweight,null);
+});

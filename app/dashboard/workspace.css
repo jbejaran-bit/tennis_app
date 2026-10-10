@@ -1950,3 +1950,11 @@
 .saved-records p { margin: 5px 0 0; white-space: pre-wrap; }
 .saved-records .button-row { flex-shrink: 0; }
 @media (max-width: 700px) { .saved-records li { align-items: flex-start; flex-direction: column; gap: 10px; } .saved-data-hub .section-heading { align-items: stretch; flex-direction: column; } }
+
+.target-planner { border-color: #556b35; }
+.target-results { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 12px; margin: 20px 0; }
+.target-results > div { padding: 14px; background: #17291f; border-radius: 12px; }
+.target-results span { display: block; color: #b4c1b7; font-size: 12px; }
+.target-results strong { display: block; color: #d5f58a; font-size: 25px; margin-top: 6px; }
+.target-results small { font-size: 12px; }
+@media (max-width: 600px) { .target-results { grid-template-columns: 1fr; } }

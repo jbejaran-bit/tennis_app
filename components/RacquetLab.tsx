@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import RacquetVisualizer from "./RacquetVisualizer";
 import Icon from "./Icons";
+import TargetPlanner from "./TargetPlanner";
 import {
   MODELS,
   Setup,
@@ -354,6 +355,7 @@ export default function RacquetLab() {
             )}
           </div>
         </section>
+        {valid && <TargetPlanner setup={setup} onApply={update} />}
         <section className="panel">
           <div className="section-heading">
             <h3>

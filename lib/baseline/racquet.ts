@@ -248,3 +248,20 @@ export function readSharedSetup(hash: string): Setup | null {
   if (!isSetup(setup)) throw new Error("Invalid shared setup.");
   return setup;
 }
+
+/** Solve conservation of mass and first moment for two fixed addition points. */
+export function planTarget(s: Setup, targetWeight: number, targetBalance: number):
+  { ok: false; reason: string } | { ok: true; tip: number; butt: number; setup: Setup; result: ReturnType<typeof calculateSetup> } {
+  if (!isSetup(s) || !Number.isFinite(targetWeight) || !Number.isFinite(targetBalance) || targetWeight < 100 || targetWeight > 1000 || targetBalance <= 0 || targetBalance >= s.length)
+    return { ok: false, reason: "Enter a valid target weight and a balance between the butt and tip." };
+  const current = calculateSetup(s);
+  const extra = targetWeight - current.weight;
+  if (extra < -1e-8) return { ok: false, reason: "This target requires removing weight. Reduce your existing additions first, then try again." };
+  const tipPosition = s.length - 0.6;
+  const tip = (targetWeight * targetBalance - current.weight * current.balance - extra * 2) / (tipPosition - 2);
+  const butt = extra - tip;
+  if (tip < -1e-8 || butt < -1e-8) return { ok: false, reason: "This balance cannot be reached at that weight using tip and butt additions. Try more total weight or a balance closer to your current setup." };
+  const next = { ...s, lead12: s.lead12 + Math.max(0, tip), butt: s.butt + Math.max(0, butt) };
+  if (!isSetup(next)) return { ok: false, reason: "The required additions exceed the Lab’s 100 g limit per location. Choose a closer target." };
+  return { ok: true, tip: Math.max(0, tip), butt: Math.max(0, butt), setup: next, result: calculateSetup(next) };
+}
