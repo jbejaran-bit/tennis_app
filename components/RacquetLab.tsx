@@ -71,7 +71,7 @@ export default function RacquetLab() {
         min={min}
         max={max}
         step={step}
-        value={setup[key] as number}
+        value={Number((setup[key] as number).toFixed(2))}
         onChange={(e) => update({ [key]: Number(e.target.value) })}
       />
       {help && <small>{help}</small>}
