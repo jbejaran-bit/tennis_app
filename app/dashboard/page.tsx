@@ -2,6 +2,7 @@
 import { ChangeEvent, useEffect, useState } from "react";
 import Link from "next/link";
 import Icon, { IconName } from "@/components/Icons";
+import SavedDataHub from "@/components/SavedDataHub";
 import ProgressHub from "@/components/ProgressHub";
 import RacquetLab from "@/components/RacquetLab";
 import TrainingHub, { LessonsHub } from "@/components/TrainingHub";
@@ -12,7 +13,7 @@ import {
   Match,
   PracticeSession,
   isMatch,
-  validDate,
+  isPracticeSession,
   matchSummary,
   isLegacyDemo,
   today,
@@ -25,7 +26,7 @@ import { mergeById, readStored } from "@/lib/baseline/storage";
 import { createClient } from "@/lib/supabase/client";
 import "./workspace.css";
 type Tab =
-  "progress" | "overview" | "racquet-lab" | "matches" | "training" | "lessons" | "gallery";
+  "saved-data" | "progress" | "overview" | "racquet-lab" | "matches" | "training" | "lessons" | "gallery";
 const tabs: { id: Tab; name: string; icon: IconName; description: string }[] = [
   {
     id: "overview",
@@ -58,6 +59,7 @@ const tabs: { id: Tab; name: string; icon: IconName; description: string }[] = [
     icon: "lessons",
     description: "Simple patterns you can take straight onto court.",
   },
+  { id: "saved-data", name: "Saved data", icon: "lessons", description: "Edit, archive and restore your personal records." },
   {
     id: "gallery",
     name: "Video journal",
@@ -67,19 +69,7 @@ const tabs: { id: Tab; name: string; icon: IconName; description: string }[] = [
 ];
 const validMatches = (v: unknown): v is Match[] =>
   Array.isArray(v) && v.every(isMatch);
-const validSessions = (v: unknown): v is PracticeSession[] =>
-  Array.isArray(v) &&
-  v.every(
-    (s) =>
-      s &&
-      typeof s.id === "string" &&
-      drills.some((d) => d.id === s.drillId) &&
-      validDate(s.date) &&
-      Number.isFinite(s.minutes) &&
-      s.minutes >= 1 &&
-      s.minutes <= 300 &&
-      typeof s.notes === "string",
-  );
+const validSessions = (v: unknown): v is PracticeSession[] => Array.isArray(v) && v.every(isPracticeSession);
 const validSetups = (v: unknown): v is Setup[] =>
   Array.isArray(v) && v.every(isSetup);
 function CourtArt() {
@@ -181,11 +171,11 @@ export default function DashboardPage() {
   };
   const stats = matchSummary(matches.value);
   const real = matches.value
-    .filter((m) => !isLegacyDemo(m))
+    .filter((m) => !m.archived && !isLegacyDemo(m))
     .sort((a, b) => b.date.localeCompare(a.date));
   const recent = real.slice(0, 5);
-  const practiceMinutes = sessions.value.reduce((a, s) => a + s.minutes, 0);
-  const lastSetup = setups.value.at(-1);
+  const practiceMinutes = sessions.value.filter(s => !s.archived).reduce((a, s) => a + s.minutes, 0);
+  const lastSetup = setups.value.filter(s => !s.archived).at(-1);
   const frame = lastSetup ? calculateSetup(lastSetup) : null;
   const activeInfo = tabs.find((t) => t.id === active)!;
   function saveMatch(m: Match) {
@@ -196,7 +186,7 @@ export default function DashboardPage() {
     if (
       matches.save((current) =>
         current.some((x) => x.id === m.id)
-          ? current.map((x) => (x.id === m.id ? m : x))
+          ? current.map((x) => (x.id === m.id ? { ...m, archived: x.archived } : x))
           : [m, ...current],
       )
     ) {
@@ -420,7 +410,7 @@ export default function DashboardPage() {
                 <Stat
                   label="PRACTICE TIME"
                   value={practiceMinutes ? practiceMinutes + " min" : "—"}
-                  note={`${sessions.value.length} sessions in your journal`}
+                  note={`${sessions.value.filter(s => !s.archived).length} sessions in your journal`}
                 />
               </section>
               <div className="overview-grid">
@@ -468,7 +458,7 @@ export default function DashboardPage() {
                   <div className="card-bottom">
                     <span>
                       {lastSetup
-                        ? `${setups.value.length} saved setups · estimates`
+                        ? `${setups.value.filter(s => !s.archived).length} saved setups · estimates`
                         : "Your first setup is a few inputs away"}
                     </span>
                     <button
@@ -589,11 +579,12 @@ export default function DashboardPage() {
               </div>
             </>
           )}
+          {active === "saved-data" && <SavedDataHub matches={matches.value} sessions={sessions.value} setups={setups.value} saveMatches={matches.save} saveSessions={sessions.save} saveSetups={setups.save} onEditMatch={setForm} error={matches.error || sessions.error || setups.error} />}
           {active === "progress" && <ProgressHub matches={matches.value} sessions={sessions.value} onLog={() => setForm("new")} onPractice={() => navigate("training")} />}
           {active === "racquet-lab" && <RacquetLab />}
           {active === "matches" && (
             <MatchHub
-              matches={matches.value}
+              matches={matches.value.filter(m => !m.archived)}
               onLog={() => setForm("new")}
               onEdit={setForm}
               onPractice={practice}
@@ -602,7 +593,7 @@ export default function DashboardPage() {
           {active === "training" && (
             <TrainingHub
               key={initialDrill}
-              sessions={sessions.value}
+              sessions={sessions.value.filter(s => !s.archived)}
               saveSessions={sessions.save}
               error={sessions.error}
               initialDrill={initialDrill}
@@ -635,7 +626,7 @@ export default function DashboardPage() {
       </div>
       {form && (
         <MatchForm
-          setups={setups.value}
+          setups={setups.value.filter(s => !s.archived)}
           error={matches.error}
           initial={form === "new" ? undefined : form}
           onSave={saveMatch}

@@ -194,3 +194,26 @@ test('Malformed and oversized shared configurations cannot be loaded', () => {
   assert.throws(() => readSharedSetup('#racquet-lab?setup='+encodeURIComponent(JSON.stringify({...newSetup(),baseWeight:-1}))));
   assert.throws(() => readSharedSetup('#racquet-lab?setup='+'x'.repeat(6001)));
 });
+
+const { setArchived } = load('lib/baseline/storage.ts');
+const { isPracticeSession } = load('lib/baseline/data.ts');
+test('Archive and restore retain full records without mutating the original list', () => {
+  const original = [{...progressMatch,notes:'Keep this note'}, {...progressMatch,id:'other'}];
+  const archived = setArchived(original,'real',true);
+  assert.equal(original[0].archived,undefined); assert.equal(archived.length,2);
+  assert.equal(archived[0].notes,'Keep this note'); assert.equal(archived[1],original[1]);
+  assert.equal(matchSummary(archived).total,1);
+  const restored = setArchived(archived,'real',false);
+  assert.equal(matchSummary(restored).total,2); assert.equal(restored[0].notes,'Keep this note');
+});
+test('Archived practices and matches are excluded from every progress aggregate', () => {
+  const session = {id:'practice',drillId:'serve',minutes:30,date:'2026-10-09',notes:'Preserved',archived:true};
+  const report = progressSummary([{...progressMatch,archived:true}],[session],'2026-10-09',28);
+  assert.equal(report.total,0);assert.equal(report.minutes,0);assert.equal(report.sessions,0);assert.equal(report.activeDays,0);assert.equal(report.surfaces.length,0);assert.equal(report.recent.length,0);assert.ok(report.weekly.every(w => w.minutes === 0));
+  assert.ok(isPracticeSession(session));assert.ok(!isPracticeSession({...session,archived:'true'}));assert.ok(!isMatch({...progressMatch,archived:'true'}));assert.ok(!isSetup({...newSetup(),archived:'true'}));
+});
+test('Archive survives backup serialization; shared setups open active', () => {
+  const archived = {...newSetup(),archived:true};
+  assert.ok(isSetup(JSON.parse(JSON.stringify(archived))));
+  assert.equal(readSharedSetup(shareSetupHash(archived)).archived,false);
+});

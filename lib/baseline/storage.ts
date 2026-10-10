@@ -41,3 +41,8 @@ export function mergeById<T extends { id: string }>(
   }
   return next;
 }
+
+/** Archive flags retain full records for restore and JSON backups. */
+export function setArchived<T extends {id: string; archived?: boolean}>(items: T[], id: string, archived: boolean): T[] {
+  return items.map(item => item.id === id ? {...item, archived} : item);
+}

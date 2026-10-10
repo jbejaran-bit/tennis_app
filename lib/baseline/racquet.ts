@@ -121,6 +121,7 @@ export const MODELS = [
   },
 ];
 export type Setup = {
+  archived?: boolean;
   id: string;
   name: string;
   model: string;
@@ -168,6 +169,7 @@ export function isSetup(value: unknown): value is Setup {
   if (!value || typeof value !== "object") return false;
   const s = value as Setup;
   return (
+    (s.archived === undefined || typeof s.archived === "boolean") &&
     ["id", "name", "model", "color", "stringName", "tension", "notes"].every(
       (k) => typeof s[k] === "string",
     ) &&
@@ -242,7 +244,7 @@ export function readSharedSetup(hash: string): Setup | null {
   if (hash.length > 6000) throw new Error("Shared setup link is too long.");
   const value = JSON.parse(decodeURIComponent(hash.slice("#racquet-lab?setup=".length)));
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Invalid shared setup.");
-  const setup = {...value, id: "", notes: ""};
+  const setup = {...value, id: "", notes: "", archived: false};
   if (!isSetup(setup)) throw new Error("Invalid shared setup.");
   return setup;
 }

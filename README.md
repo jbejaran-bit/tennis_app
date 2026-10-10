@@ -41,3 +41,7 @@ Tests cover mass/balance calculations, swingweight units and axis, unknown basel
 Progress shows 28- and 84-day windows, seven-day practice totals, surface results, and recent match reflections. Sample matches, future entries, and unknown serve statistics are excluded as appropriate. Percentages are descriptive; serve averages are unweighted across recorded matches.
 
 Racket Lab can copy a shareable configuration link. Only known specification fields, the setup name, strings, and tension are included; court notes and local record IDs are excluded. Opening a link shows a preview and requires loading it explicitly. Saved setups remain intact. Links contain their configuration in the URL fragment and do not require an account or a backend record.
+
+## Saved records
+
+The Saved data page offers searchable active/archive views for matches, practice sessions and racket setups. Archive is reversible: records retain their original content and stay in JSON backups. Archived entries are excluded from dashboard and Progress totals, the match log, practice journal and active racket selectors. Practice dates, duration and notes can be edited. Older backups without an archive flag remain supported.

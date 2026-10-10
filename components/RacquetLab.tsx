@@ -50,7 +50,9 @@ export default function RacquetLab() {
     setShareLink("");
   };
   const result = calculateSetup(setup);
-  const comparison = saved.value.find((s) => s.id === compareId);
+  const archivedDraft = saved.value.some(s => s.id === setup.id && s.archived);
+  const activeSetups = saved.value.filter(s => !s.archived);
+  const comparison = activeSetups.find((s) => s.id === compareId);
   const compared = comparison ? calculateSetup(comparison) : null;
   const valid = isSetup(setup);
   const number = (
@@ -75,6 +77,7 @@ export default function RacquetLab() {
     </label>
   );
   const save = () => {
+    if (archivedDraft) { setMessage("Restore this setup in Saved data, or make a copy before saving."); return; }
     if (!valid || !setup.name.trim()) {
       setMessage("Enter a setup name and valid starting specs.");
       return;
@@ -87,7 +90,7 @@ export default function RacquetLab() {
     if (
       saved.save((current) => [
         ...current.filter((s) => s.id !== item.id),
-        item,
+        { ...item, archived: current.find(s => s.id === item.id)?.archived || false },
       ])
     ) {
       setSetup(item);
@@ -356,7 +359,7 @@ export default function RacquetLab() {
             <h3>
               <span className="step-number">03</span> Save & compare
             </h3>
-            <span className="badge">{saved.value.length} SAVED</span>
+            <span className="badge">{activeSetups.length} SAVED</span>
           </div>
           <div className="form-grid">
             <label className="field">
@@ -401,7 +404,7 @@ export default function RacquetLab() {
           <div className="button-row">
             <button
               className="button primary"
-              disabled={!valid || !saved.ready || !!saved.error}
+              disabled={!valid || !saved.ready || !!saved.error || archivedDraft}
               onClick={save}
             >
               <Icon name="check" />
@@ -434,6 +437,7 @@ export default function RacquetLab() {
           </div>
           <button className="button" disabled={!valid} onClick={share}>Copy setup link</button>
           {shareLink && <label className="field mt-4">Shareable setup link<input readOnly value={shareLink} onFocus={e => e.target.select()} /><small>Includes specs, name, strings and tension. Excludes your court notes. Anyone with this link can open the configuration.</small></label>}
+          {archivedDraft && <p className="notice">This setup is archived. Restore it in Saved data, or use Make a copy to start a new active setup.</p>}
           {(message || saved.error || !valid) && (
             <p role="status" className="notice">
               {saved.error ||
@@ -442,7 +446,7 @@ export default function RacquetLab() {
                   : message)}
             </p>
           )}
-          {saved.value.length > 0 && (
+          {activeSetups.length > 0 && (
             <>
               <div className="form-grid mt-4">
                 <label className="field">
@@ -460,7 +464,7 @@ export default function RacquetLab() {
                     }}
                   >
                     <option value="">Choose a saved setup</option>
-                    {saved.value.map((s) => (
+                    {activeSetups.map((s) => (
                       <option key={s.id} value={s.id}>
                         {s.name}
                       </option>
@@ -474,7 +478,7 @@ export default function RacquetLab() {
                     onChange={(e) => setCompareId(e.target.value)}
                   >
                     <option value="">Choose a comparison</option>
-                    {saved.value.map((s) => (
+                    {activeSetups.map((s) => (
                       <option key={s.id} value={s.id}>
                         {s.name}
                       </option>

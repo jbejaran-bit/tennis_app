@@ -1,4 +1,5 @@
 export type Match = {
+  archived?: boolean;
   id: string;
   opponent: string;
   score: string;
@@ -46,6 +47,7 @@ export function isMatch(value: unknown): value is Match {
   if (!value || typeof value !== "object") return false;
   const v = value as Match;
   return (
+    (v.archived === undefined || typeof v.archived === "boolean") &&
     typeof v.id === "string" &&
     v.id.length > 0 &&
     typeof v.opponent === "string" &&
@@ -81,7 +83,7 @@ export function isLegacyDemo(m: Match) {
   );
 }
 export function matchSummary(matches: Match[]) {
-  const real = matches.filter((m) => !isLegacyDemo(m));
+  const real = matches.filter((m) => !m.archived && !isLegacyDemo(m));
   const serves = real.filter((m) => m.firstServe != null);
   const wins = real.filter((m) => m.result === "win").length;
   return {
@@ -212,6 +214,7 @@ export const drills = [
   },
 ];
 export type PracticeSession = {
+  archived?: boolean;
   id: string;
   drillId: string;
   date: string;
@@ -290,8 +293,8 @@ export function shiftDate(value: string, days: number) {
 }
 export function progressSummary(matches: Match[], sessions: PracticeSession[], end: string, days: number) {
   const start = shiftDate(end, 1 - days);
-  const selected = matches.filter(m => !isLegacyDemo(m) && m.date >= start && m.date <= end);
-  const practice = sessions.filter(s => s.date >= start && s.date <= end);
+  const selected = matches.filter(m => !m.archived && !isLegacyDemo(m) && m.date >= start && m.date <= end);
+  const practice = sessions.filter(s => !s.archived && s.date >= start && s.date <= end);
   const weekly = Array.from({length: Math.ceil(days / 7)}, (_, i) => {
     const from = shiftDate(start, i * 7);
     const to = [shiftDate(from, 6), end].sort()[0];
@@ -316,4 +319,10 @@ export function suggestedDrill(match: Match) {
   if (/serve/.test(focus)) return "serve";
   if (/rally|depth|consisten/.test(focus)) return "depth";
   return match.firstServe !== null ? "serve" : "depth";
+}
+
+export function isPracticeSession(value: unknown): value is PracticeSession {
+  if (!value || typeof value !== "object") return false;
+  const s = value as PracticeSession;
+  return typeof s.id === "string" && s.id.length > 0 && drills.some(d => d.id === s.drillId) && validDate(s.date) && Number.isFinite(s.minutes) && s.minutes >= 1 && s.minutes <= 300 && typeof s.notes === "string" && (s.archived === undefined || typeof s.archived === "boolean");
 }
