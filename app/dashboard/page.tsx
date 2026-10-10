@@ -149,7 +149,8 @@ export default function DashboardPage() {
   useEffect(() => {
     const readHash = () => {
       const id = window.location.hash.slice(1).split("?")[0];
-      if (tabs.some((t) => t.id === id)) setActive(id as Tab);
+      if (!id) setActive("overview");
+      else if (tabs.some((t) => t.id === id)) setActive(id as Tab);
     };
     readHash();
     window.addEventListener("hashchange", readHash);

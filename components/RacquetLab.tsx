@@ -98,6 +98,7 @@ export default function RacquetLab() {
     try {
       const link = window.location.origin + window.location.pathname + shareSetupHash(setup);
       setShareLink(link);
+      setMessage("Share link ready below. Copy it to share your configuration; court notes are excluded.");
       try { await navigator.clipboard.writeText(link); setMessage("Setup link copied. Only specs, setup name, strings and tension are included. Court notes stay private."); }
       catch { setMessage("Copy the link below to share this configuration. Court notes are excluded."); }
     } catch { setMessage("Check the setup inputs before sharing."); }
