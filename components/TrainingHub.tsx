@@ -72,10 +72,12 @@ export default function TrainingHub({
   sessions,
   saveSessions,
   initialDrill,
+  error,
 }: {
   sessions: PracticeSession[];
   saveSessions: SaveLocal<PracticeSession[]>;
   initialDrill?: string;
+  error?: string;
 }) {
   const [filter, setFilter] = useState("All");
   const [active, setActive] = useState(initialDrill || "");
@@ -251,6 +253,7 @@ export default function TrainingHub({
                 placeholder="e.g. 18/30 target hits. Wide serve needs more margin."
               />
             </label>
+            {error && <p role="alert" className="notice">{error}</p>}
             <button className="button primary" type="submit">
               Save practice
             </button>

@@ -9,6 +9,8 @@ import {
   calculateSetup,
   balanceLabel,
   isSetup,
+  shareSetupHash,
+  readSharedSetup,
 } from "@/lib/baseline/racquet";
 import { downloadJson } from "@/lib/baseline/data";
 import { useLocalData } from "@/lib/baseline/useLocalData";
@@ -19,6 +21,8 @@ export default function RacquetLab() {
   const saved = useLocalData<Setup[]>("baseline_setups_v2", [], validSetups);
   const [compareId, setCompareId] = useState("");
   const [message, setMessage] = useState("");
+  const [shared, setShared] = useState<Setup | null>(null);
+  const [shareLink, setShareLink] = useState("");
   const [ready, setReady] = useState(false);
   useEffect(() => {
     try {
@@ -28,6 +32,9 @@ export default function RacquetLab() {
         if (isSetup(v)) setSetup(v);
       }
     } catch {}
+    try {
+      setShared(readSharedSetup(window.location.hash));
+    } catch { setMessage("This shared setup link is invalid. Your saved setups have not changed."); }
     setReady(true);
   }, []);
   useEffect(() => {
@@ -40,6 +47,7 @@ export default function RacquetLab() {
   const update = (patch: Partial<Setup>) => {
     setSetup((s) => ({ ...s, ...patch }));
     setMessage("");
+    setShareLink("");
   };
   const result = calculateSetup(setup);
   const comparison = saved.value.find((s) => s.id === compareId);
@@ -86,8 +94,17 @@ export default function RacquetLab() {
       setMessage("Setup saved on this device.");
     }
   };
+  async function share() {
+    try {
+      const link = window.location.origin + window.location.pathname + shareSetupHash(setup);
+      setShareLink(link);
+      try { await navigator.clipboard.writeText(link); setMessage("Setup link copied. Only specs, setup name, strings and tension are included. Court notes stay private."); }
+      catch { setMessage("Copy the link below to share this configuration. Court notes are excluded."); }
+    } catch { setMessage("Check the setup inputs before sharing."); }
+  }
   return (
     <div className="lab-layout">
+      {shared && <section className="panel share-panel"><div className="eyebrow">SHARED RACKET CONFIGURATION</div><h2>{shared.name}</h2><p>{shared.model} · {calculateSetup(shared).weight.toFixed(1)} g · {calculateSetup(shared).balance.toFixed(2)} cm balance. Loading replaces only your current draft; saved setups are kept.</p><div className="button-row"><button className="button primary" onClick={() => { setSetup(shared); setShared(null); setMessage("Shared setup loaded as a new draft. Save it to keep a copy."); window.history.replaceState(null, "", "#racquet-lab"); }}>Load shared setup</button><button className="button" onClick={() => { setShared(null); window.history.replaceState(null, "", "#racquet-lab"); }}>Dismiss</button></div></section>}
       <div className="lab-visual panel">
         <div className="eyebrow">YOUR FRAME / LIVE ESTIMATE</div>
         <h2>{setup.model === "Custom frame" ? setup.name : setup.model}</h2>
@@ -414,6 +431,8 @@ export default function RacquetLab() {
               Export specs
             </button>
           </div>
+          <button className="button" disabled={!valid} onClick={share}>Copy setup link</button>
+          {shareLink && <label className="field mt-4">Shareable setup link<input readOnly value={shareLink} onFocus={e => e.target.select()} /><small>Includes specs, name, strings and tension. Excludes your court notes. Anyone with this link can open the configuration.</small></label>}
           {(message || saved.error || !valid) && (
             <p role="status" className="notice">
               {saved.error ||

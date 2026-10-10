@@ -281,3 +281,39 @@ export const lessons = [
     drill: "transition",
   },
 ];
+
+/** Calendar-day arithmetic in UTC avoids daylight-saving gaps. */
+export function shiftDate(value: string, days: number) {
+  const d = new Date(value + "T12:00:00Z");
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+export function progressSummary(matches: Match[], sessions: PracticeSession[], end: string, days: number) {
+  const start = shiftDate(end, 1 - days);
+  const selected = matches.filter(m => !isLegacyDemo(m) && m.date >= start && m.date <= end);
+  const practice = sessions.filter(s => s.date >= start && s.date <= end);
+  const weekly = Array.from({length: Math.ceil(days / 7)}, (_, i) => {
+    const from = shiftDate(start, i * 7);
+    const to = [shiftDate(from, 6), end].sort()[0];
+    const logs = practice.filter(s => s.date >= from && s.date <= to);
+    return {from, to, minutes: logs.reduce((sum, s) => sum + s.minutes, 0), sessions: logs.length};
+  });
+  return {
+    ...matchSummary(selected), start, end, weekly,
+    minutes: practice.reduce((sum, s) => sum + s.minutes, 0),
+    sessions: practice.length,
+    activeDays: new Set([...selected, ...practice].map(v => v.date)).size,
+    surfaces: Object.entries(surfaces).map(([id, label]) => ({id, label, ...matchSummary(selected.filter(m => m.surface === id))})).filter(s => s.total > 0),
+    recent: [...selected].sort((a,b) => b.date.localeCompare(a.date)).slice(0, 10),
+  };
+}
+export function suggestedDrill(match: Match) {
+  const focus = (match.focus || "").toLowerCase();
+  if (/return/.test(focus)) return "return";
+  if (/volley|net|approach/.test(focus)) return "transition";
+  if (/footwork|movement|split|recover/.test(focus)) return "movement";
+  if (/wall/.test(focus)) return "wall";
+  if (/serve/.test(focus)) return "serve";
+  if (/rally|depth|consisten/.test(focus)) return "depth";
+  return match.firstServe !== null ? "serve" : "depth";
+}

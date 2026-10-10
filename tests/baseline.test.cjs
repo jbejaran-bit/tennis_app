@@ -162,3 +162,35 @@ test("Racket imported numbers cannot be strings and grip counts are integral", (
   assert.ok(!isSetup({ ...newSetup(), overgrips: 6 }));
   assert.ok(!isSetup({ ...newSetup(), strings: 41 }));
 });
+
+const { progressSummary, suggestedDrill, shiftDate } = load("lib/baseline/data.ts");
+const { shareSetupHash, readSharedSetup } = load("lib/baseline/racquet.ts");
+const progressMatch = {id:'real',opponent:'Partner',score:'6-4',surface:'hard',style:'Unknown',result:'win',date:'2026-10-09',firstServe:null,unforcedErrors:null};
+test('Progress windows exclude future, older and sample matches and keep zero stats', () => {
+  const matches = [progressMatch, {...progressMatch,id:'zero',firstServe:0,result:'loss'}, {...progressMatch,id:'future',date:'2026-10-10'}, {...progressMatch,id:'old',date:'2026-09-11'}];
+  const r = progressSummary(matches, [{id:'p',drillId:'serve',minutes:30,date:'2026-10-09',notes:''}], '2026-10-09', 28);
+  assert.equal(r.start,'2026-09-12'); assert.equal(r.total,2); assert.equal(r.winRate,50); assert.equal(r.avgServe,0); assert.equal(r.serveCount,1); assert.equal(r.activeDays,1); assert.equal(r.minutes,30); assert.equal(r.weekly.length,4); assert.equal(r.weekly[3].minutes,30);
+});
+test('Progress calendar arithmetic handles leap years and daylight saving boundaries', () => {
+  assert.equal(shiftDate('2024-03-01',-1),'2024-02-29');
+  assert.equal(shiftDate('2026-03-09',-1),'2026-03-08');
+  assert.equal(progressSummary([],[],'2026-10-09',84).weekly.length,12);
+});
+test('Practice focus takes priority over availability of serve statistics', () => {
+  assert.equal(suggestedDrill({...progressMatch,focus:'Return placement',firstServe:60}),'return');
+  assert.equal(suggestedDrill({...progressMatch,focus:'Serve placement'}),'serve');
+  assert.equal(suggestedDrill({...progressMatch,focus:'Footwork recovery'}),'movement');
+});
+test('Share links preserve Unicode specs without IDs or private notes', () => {
+  const s = {...newSetup(),id:'private-id',name:'Javi · competición 🎾',notes:'Private note',lead12:3};
+  const hash = shareSetupHash(s); const decoded = decodeURIComponent(hash);
+  assert.ok(!decoded.includes('private-id')); assert.ok(!decoded.includes('Private note'));
+  const restored = readSharedSetup(hash);
+  assert.equal(restored.name,s.name); assert.equal(restored.lead12,3); assert.equal(restored.id,''); assert.equal(restored.notes,'');
+});
+test('Malformed and oversized shared configurations cannot be loaded', () => {
+  assert.equal(readSharedSetup('#overview'),null);
+  assert.throws(() => readSharedSetup('#racquet-lab?setup=%bad'));
+  assert.throws(() => readSharedSetup('#racquet-lab?setup='+encodeURIComponent(JSON.stringify({...newSetup(),baseWeight:-1}))));
+  assert.throws(() => readSharedSetup('#racquet-lab?setup='+'x'.repeat(6001)));
+});

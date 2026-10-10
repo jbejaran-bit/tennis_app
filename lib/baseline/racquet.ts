@@ -229,3 +229,20 @@ export function balanceLabel(hl: number) {
     ? "Even balance"
     : `${Math.abs(hl).toFixed(1)} pts ${hl > 0 ? "HL" : "HH"}`;
 }
+
+/** Sharing is opt-in; private court notes and local record IDs never leave the device. */
+export function shareSetupHash(setup: Setup) {
+  if (!isSetup(setup)) throw new Error("Check the setup inputs before sharing.");
+  const specs = Object.fromEntries(Object.keys(newSetup()).filter(k => k !== "notes" && k !== "id").map(k => [k, setup[k]]));
+  const encoded = encodeURIComponent(JSON.stringify({...specs, name: setup.name.slice(0, 100), model: setup.model.slice(0, 100), stringName: setup.stringName.slice(0, 150), tension: setup.tension.slice(0, 100)}));
+  return "#racquet-lab?setup=" + encoded;
+}
+export function readSharedSetup(hash: string): Setup | null {
+  if (!hash.startsWith("#racquet-lab?setup=")) return null;
+  if (hash.length > 6000) throw new Error("Shared setup link is too long.");
+  const value = JSON.parse(decodeURIComponent(hash.slice("#racquet-lab?setup=".length)));
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Invalid shared setup.");
+  const setup = {...value, id: "", notes: ""};
+  if (!isSetup(setup)) throw new Error("Invalid shared setup.");
+  return setup;
+}

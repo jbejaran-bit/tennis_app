@@ -35,3 +35,9 @@ npm run build
 ```
 
 Tests cover mass/balance calculations, swingweight units and axis, unknown baselines, custom lengths, stat validation, missing values and exclusion of legacy sample matches.
+
+## Progress and sharing
+
+Progress shows 28- and 84-day windows, seven-day practice totals, surface results, and recent match reflections. Sample matches, future entries, and unknown serve statistics are excluded as appropriate. Percentages are descriptive; serve averages are unweighted across recorded matches.
+
+Racket Lab can copy a shareable configuration link. Only known specification fields, the setup name, strings, and tension are included; court notes and local record IDs are excluded. Opening a link shows a preview and requires loading it explicitly. Saved setups remain intact. Links contain their configuration in the URL fragment and do not require an account or a backend record.

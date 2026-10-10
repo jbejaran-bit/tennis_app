@@ -6,21 +6,31 @@ import {
   today,
   dateLabel,
   isLegacyDemo,
+  suggestedDrill,
+  drills,
 } from "@/lib/baseline/data";
+import { Setup } from "@/lib/baseline/racquet";
 import Modal from "./Modal";
 import Icon from "./Icons";
 export function MatchForm({
   initial,
+  setups = [],
+  error,
   onSave,
   onClose,
 }: {
   initial?: Match;
+  setups?: Setup[];
+  error?: string;
   onSave: (m: Match) => void;
   onClose: () => void;
 }) {
+  const [validationError, setValidationError] = useState("");
   function save(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const f = new FormData(e.currentTarget);
+    if (!String(f.get("opponent")).trim() || !String(f.get("score")).trim()) { setValidationError("Enter an opponent and score before saving."); return; }
+    setValidationError("");
     const optional = (k: string) =>
       String(f.get(k)).trim() === "" ? null : Number(f.get(k));
     onSave({
@@ -136,12 +146,14 @@ export function MatchForm({
           <label className="field">
             Racket / string setup
             <input
+              list="saved-racket-setups"
               name="setup"
               defaultValue={initial?.setup}
               maxLength={150}
               placeholder="Which setup did you use?"
             />
           </label>
+          <datalist id="saved-racket-setups">{setups.map(s => <option key={s.id} value={`${s.name}${s.stringName ? " · " + s.stringName : ""}${s.tension ? " · " + s.tension : ""}`} />)}</datalist>
           <label className="field">
             Next practice focus
             <input
@@ -162,6 +174,7 @@ export function MatchForm({
             placeholder="What worked? What broke down under pressure?"
           />
         </label>
+        {(error || validationError) && <p role="alert" className="notice">{error || validationError}</p>}
         <div className="button-row">
           <button type="submit" className="button primary">
             Save match
@@ -324,16 +337,13 @@ export default function MatchHub({
             </div>
             <h4>A starting point for practice</h4>
             <p>
-              {active.firstServe !== null
-                ? "You recorded " +
-                  active.firstServe +
-                  "% first serves in. A target drill gives you a repeatable way to practice placement and compare sessions."
-                : "You did not track serve percentage. Try a rally drill with a simple, countable target for your next session."}
+              {active.focus ? `Your focus: ${active.focus}. ` : "Choose a repeatable, countable target. "}
+              Suggested session: {drills.find(d => d.id === suggestedDrill(active))?.title}.
             </p>
             <button
               className="button primary full"
               onClick={() =>
-                onPractice(active.firstServe !== null ? "serve" : "depth")
+                onPractice(suggestedDrill(active))
               }
             >
               Open suggested drill <Icon name="arrow" />

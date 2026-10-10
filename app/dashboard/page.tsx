@@ -2,6 +2,7 @@
 import { ChangeEvent, useEffect, useState } from "react";
 import Link from "next/link";
 import Icon, { IconName } from "@/components/Icons";
+import ProgressHub from "@/components/ProgressHub";
 import RacquetLab from "@/components/RacquetLab";
 import TrainingHub, { LessonsHub } from "@/components/TrainingHub";
 import MatchHub, { MatchForm } from "@/components/MatchHub";
@@ -24,7 +25,7 @@ import { mergeById, readStored } from "@/lib/baseline/storage";
 import { createClient } from "@/lib/supabase/client";
 import "./workspace.css";
 type Tab =
-  "overview" | "racquet-lab" | "matches" | "training" | "lessons" | "gallery";
+  "progress" | "overview" | "racquet-lab" | "matches" | "training" | "lessons" | "gallery";
 const tabs: { id: Tab; name: string; icon: IconName; description: string }[] = [
   {
     id: "overview",
@@ -44,6 +45,7 @@ const tabs: { id: Tab; name: string; icon: IconName; description: string }[] = [
     icon: "matches",
     description: "Remember the patterns. Take something into your next match.",
   },
+  { id: "progress", name: "Progress", icon: "overview", description: "See your practice rhythm and the patterns in your results." },
   {
     id: "training",
     name: "Training",
@@ -146,7 +148,7 @@ export default function DashboardPage() {
   const setups = useLocalData<Setup[]>("baseline_setups_v2", [], validSetups);
   useEffect(() => {
     const readHash = () => {
-      const id = window.location.hash.slice(1);
+      const id = window.location.hash.slice(1).split("?")[0];
       if (tabs.some((t) => t.id === id)) setActive(id as Tab);
     };
     readHash();
@@ -168,7 +170,8 @@ export default function DashboardPage() {
   }, []);
   const navigate = (id: Tab) => {
     setActive(id);
-    window.history.replaceState(null, "", `#${id}`);
+    if (window.location.hash !== `#${id}`) window.history.pushState(null, "", `#${id}`);
+    window.scrollTo({ top: 0, behavior: "instant" });
     setNotice("");
   };
   const practice = (id: string) => {
@@ -585,6 +588,7 @@ export default function DashboardPage() {
               </div>
             </>
           )}
+          {active === "progress" && <ProgressHub matches={matches.value} sessions={sessions.value} onLog={() => setForm("new")} onPractice={() => navigate("training")} />}
           {active === "racquet-lab" && <RacquetLab />}
           {active === "matches" && (
             <MatchHub
@@ -599,6 +603,7 @@ export default function DashboardPage() {
               key={initialDrill}
               sessions={sessions.value}
               saveSessions={sessions.save}
+              error={sessions.error}
               initialDrill={initialDrill}
             />
           )}
@@ -629,6 +634,8 @@ export default function DashboardPage() {
       </div>
       {form && (
         <MatchForm
+          setups={setups.value}
+          error={matches.error}
           initial={form === "new" ? undefined : form}
           onSave={saveMatch}
           onClose={() => setForm(null)}
