@@ -326,3 +326,15 @@ export function isPracticeSession(value: unknown): value is PracticeSession {
   const s = value as PracticeSession;
   return typeof s.id === "string" && s.id.length > 0 && drills.some(d => d.id === s.drillId) && validDate(s.date) && Number.isFinite(s.minutes) && s.minutes >= 1 && s.minutes <= 300 && typeof s.notes === "string" && (s.archived === undefined || typeof s.archived === "boolean");
 }
+
+/** Names are matched conservatively: case and spacing only, never fuzzy identity. */
+export function opponentHistory(matches: Match[], opponent: string, end = today()) {
+  const key = (name: string) => name.trim().replace(/\s+/g, " ").toLowerCase();
+  const name = key(opponent);
+  const meetings = matches.filter(m => name && key(m.opponent) === name && !m.archived && !isLegacyDemo(m) && m.date <= end)
+    .sort((a, b) => b.date.localeCompare(a.date) || a.id.localeCompare(b.id));
+  return {
+    ...matchSummary(meetings), meetings,
+    surfaces: Object.entries(surfaces).map(([id, label]) => ({ id, label, ...matchSummary(meetings.filter(m => m.surface === id)) })).filter(s => s.total > 0),
+  };
+}

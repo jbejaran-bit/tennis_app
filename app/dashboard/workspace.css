@@ -1958,3 +1958,15 @@
 .target-results strong { display: block; color: #d5f58a; font-size: 25px; margin-top: 6px; }
 .target-results small { font-size: 12px; }
 @media (max-width: 600px) { .target-results { grid-template-columns: 1fr; } }
+
+.opponent-history { border: 1px solid var(--line, #344139); border-radius: 14px; padding: 20px; margin: 24px 0; background: #15231b; overflow-wrap: anywhere; }
+.opponent-history h3 { margin: 8px 0; }
+.opponent-record strong { display: block; font-size: 32px; color: #d5f58a; }
+.opponent-record strong small { font-size: 15px; margin-left: 3px; }
+.opponent-record strong span { color: #8d9b91; }
+.opponent-record p { margin-top: 6px; }
+.opponent-surfaces { list-style: none; padding: 0; margin: 16px 0; }
+.opponent-surfaces li { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid #344139; font-size: 13px; }
+.opponent-meetings article { padding: 16px 0; border-bottom: 1px solid #344139; }
+.opponent-meetings .section-heading { flex-wrap: wrap; gap: 10px; margin-bottom: 6px; }
+.opponent-meetings p { font-size: 13px; }

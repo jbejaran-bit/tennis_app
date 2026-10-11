@@ -244,3 +244,24 @@ test("Target planner handles an already reached target and preserves unknown swi
   assert.equal(p.ok,true); close(p.tip,0); close(p.butt,0);
   assert.equal(p.result.swingweight,null);
 });
+
+test("Opponent history matches case and whitespace but keeps different players separate", () => {
+  const { opponentHistory } = load("lib/baseline/data.ts");
+  const base = { id: "a", opponent: "Alex Smith", score: "6-4 6-4", result: "win", surface: "hard", date: "2026-10-01", style: "Unknown", firstServe: null, unforcedErrors: null };
+  const result = opponentHistory([base, {...base,id:"b",opponent:"  ALEX   SMITH ", result:"loss",surface:"clay"}, {...base,id:"c",opponent:"Alex Jones"}], "alex smith", "2026-10-11");
+  assert.equal(result.total,2); assert.equal(result.wins,1); assert.equal(result.losses,1);
+  assert.equal(result.surfaces.length,2); assert.equal(result.avgServe,null);
+});
+test("Opponent history excludes archived, future and legacy demo matches without mutating input", () => {
+  const { opponentHistory } = load("lib/baseline/data.ts");
+  const base = { id:"real", opponent:"Jannik Sinner", score:"6-4",result:"win",surface:"hard",date:"2026-10-01",style:"Unknown",firstServe:0,unforcedErrors:0 };
+  const input = [{...base,id:"future",date:"2026-12-01"},{...base,id:"archived",archived:true},{...base,id:"1",date:"2026-05-18"},base];
+  const before = JSON.stringify(input); const result = opponentHistory(input,base.opponent,"2026-10-11");
+  assert.deepEqual(result.meetings.map(m=>m.id),["real"]); assert.equal(result.avgServe,0); assert.equal(JSON.stringify(input),before);
+});
+test("Opponent history orders recent meetings first and handles empty names", () => {
+  const { opponentHistory } = load("lib/baseline/data.ts");
+  const base = { id:"old",opponent:"Alex",score:"6-4",result:"win",surface:"hard",date:"2026-09-01",style:"Unknown",firstServe:null,unforcedErrors:null };
+  assert.deepEqual(opponentHistory([base,{...base,id:"new",date:"2026-10-01"}],"Alex","2026-10-11").meetings.map(m=>m.id),["new","old"]);
+  assert.equal(opponentHistory([base]," ","2026-10-11").total,0);
+});

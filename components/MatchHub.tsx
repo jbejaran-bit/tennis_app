@@ -12,6 +12,7 @@ import {
 import { Setup } from "@/lib/baseline/racquet";
 import Modal from "./Modal";
 import Icon from "./Icons";
+import OpponentHistory from "./OpponentHistory";
 export function MatchForm({
   initial,
   setups = [],
@@ -317,6 +318,7 @@ export default function MatchHub({
                 <span>Unforced errors</span>
               </div>
             </div>
+            {!isLegacyDemo(active) && <OpponentHistory matches={matches} active={active} onSelect={id => { setFilter("all"); setQuery(""); setSelected(id); }} />}
             <h4>Your match notes</h4>
             <p className="preserve-lines">
               {active.notes ||
