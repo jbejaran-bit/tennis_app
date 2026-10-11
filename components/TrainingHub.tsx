@@ -6,10 +6,14 @@ import {
   PracticeSession,
   today,
   dateLabel,
+  readPracticeOutcome,
+  drillResults,
+  outcomeLabels,
 } from "@/lib/baseline/data";
 import { SaveLocal } from "@/lib/baseline/useLocalData";
 import Modal from "./Modal";
 import Icon from "./Icons";
+import PracticeOutcome from "./PracticeOutcome";
 export function LessonsHub({
   onPractice,
 }: {
@@ -83,6 +87,8 @@ export default function TrainingHub({
   const [active, setActive] = useState(initialDrill || "");
   const [log, setLog] = useState(false);
   const [notice, setNotice] = useState("");
+  const [formError, setFormError] = useState("");
+  const results = drillResults(sessions, active);
   const drill = drills.find((d) => d.id === active);
   function save(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -90,6 +96,9 @@ export default function TrainingHub({
     const minutes = Number(f.get("minutes"));
     if (!drill || !Number.isFinite(minutes) || minutes < 1 || minutes > 300)
       return;
+    let outcome: PracticeSession["outcome"];
+    try { outcome = readPracticeOutcome(String(f.get("successes") ?? ""), String(f.get("attempts") ?? "")); }
+    catch (e) { setFormError((e as Error).message); return; }
     if (
       saveSessions((current) => [
         {
@@ -97,6 +106,7 @@ export default function TrainingHub({
           drillId: drill.id,
           date: String(f.get("date")),
           minutes,
+          outcome,
           notes: String(f.get("notes")),
         },
         ...current,
@@ -104,7 +114,7 @@ export default function TrainingHub({
     ) {
       setLog(false);
       setNotice(
-        "Practice saved. Keep a note of the result to compare next time.",
+        "Practice saved. Your journal and drill results are updated.",
       );
     }
   }
@@ -156,7 +166,7 @@ export default function TrainingHub({
               <h3>Practice journal</h3>
               <span className="badge">{sessions.length} SESSIONS</span>
             </div>
-            {sessions.slice(0, 10).map((s) => (
+            {[...sessions].sort((a,b) => b.date.localeCompare(a.date)).slice(0, 10).map((s) => (
               <div className="journal-row" key={s.id}>
                 <div>
                   <b>
@@ -164,6 +174,7 @@ export default function TrainingHub({
                       "Practice session"}
                   </b>
                   <p>{s.notes || "No notes added"}</p>
+                  {s.outcome && <small className="drill-result-label">{s.outcome.successes}/{s.outcome.attempts} successful · {Math.round(s.outcome.successes / s.outcome.attempts * 100)}%</small>}
                 </div>
                 <span>
                   {dateLabel(s.date)}
@@ -198,11 +209,13 @@ export default function TrainingHub({
             <p className="helper">Bring: {drill.equipment}</p>
             <button
               className="button primary full"
-              onClick={() => setLog(true)}
+              onClick={() => { setFormError(""); setLog(true); }}
             >
               <Icon name="check" />
               Log this practice
             </button>
+            {outcomeLabels[drill.id] && <section className="drill-results" aria-label="Your drill results"><div className="eyebrow">YOUR DRILL RESULTS</div><h3>{results.rate === null ? "Start your benchmark" : `${results.rate}% target success`}</h3>{results.rate === null ? <p>Record successful and total attempts when logging this drill. Your results will appear here.</p> : <><p>{results.successes} successful / {results.attempts} attempts across {results.recorded.length} recorded sessions.</p><div className="table-wrap"><table><caption>Most recent recorded results</caption><thead><tr><th>Date</th><th>Result</th><th>Rate</th></tr></thead><tbody>{results.recorded.slice(0,5).map(s => <tr key={s.id}><th>{dateLabel(s.date)}</th><td>{s.outcome!.successes}/{s.outcome!.attempts}</td><td>{Math.round(s.outcome!.successes / s.outcome!.attempts * 100)}%</td></tr>)}</tbody></table></div></>}<p className="helper">Compare sessions with similar targets and conditions. Totals use recorded attempts only; untracked and archived sessions are excluded.</p></section>}
+
           </>
         ) : (
           <div className="empty-state">
@@ -244,6 +257,7 @@ export default function TrainingHub({
                 />
               </label>
             </div>
+            <PracticeOutcome drillId={drill.id} />
             <label className="field">
               Result & next-session note
               <textarea
@@ -253,7 +267,7 @@ export default function TrainingHub({
                 placeholder="e.g. 18/30 target hits. Wide serve needs more margin."
               />
             </label>
-            {error && <p role="alert" className="notice">{error}</p>}
+            {(error || formError) && <p role="alert" className="notice">{error || formError}</p>}
             <button className="button primary" type="submit">
               Save practice
             </button>

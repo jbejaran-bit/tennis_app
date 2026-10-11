@@ -265,3 +265,23 @@ test("Opponent history orders recent meetings first and handles empty names", ()
   assert.deepEqual(opponentHistory([base,{...base,id:"new",date:"2026-10-01"}],"Alex","2026-10-11").meetings.map(m=>m.id),["new","old"]);
   assert.equal(opponentHistory([base]," ","2026-10-11").total,0);
 });
+
+test("Practice outcome accepts real zero, rejects partial and impossible counts", () => {
+  const {readPracticeOutcome,isPracticeSession} = load("lib/baseline/data.ts");
+  assert.equal(readPracticeOutcome("",""),undefined);
+  assert.deepEqual(readPracticeOutcome("0","30"),{successes:0,attempts:30});
+  for (const [a,b] of [["","30"],["2",""],["31","30"],["1","0"],["1.5","30"],["0","10001"]]) assert.throws(()=>readPracticeOutcome(a,b));
+  const s={id:"p",drillId:"serve",date:"2026-10-11",minutes:15,notes:""};
+  assert.equal(isPracticeSession(s),true);
+  assert.equal(isPracticeSession({...s,outcome:{successes:0,attempts:30}}),true);
+  assert.equal(isPracticeSession({...s,outcome:{successes:"0",attempts:30}}),false);
+});
+test("Drill rates are weighted by attempts and exclude missing, archived, future and other drills", () => {
+  const {drillResults} = load("lib/baseline/data.ts");
+  const s={id:"a",drillId:"serve",date:"2026-10-01",minutes:15,notes:"",outcome:{successes:1,attempts:2}};
+  const rows=[s,{...s,id:"b",date:"2026-10-02",outcome:{successes:9,attempts:10}},{...s,id:"c",archived:true},{...s,id:"d",date:"2027-01-01"},{...s,id:"e",drillId:"return"},{...s,id:"f",outcome:undefined}];
+  const r=drillResults(rows,"serve","2026-10-11");
+  assert.equal(r.rate,83);assert.equal(r.attempts,12);assert.equal(r.successes,10);
+  assert.deepEqual(r.recorded.map(x=>x.id),["b","a"]);
+  assert.equal(drillResults([],"serve","2026-10-11").rate,null);
+});

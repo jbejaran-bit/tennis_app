@@ -214,6 +214,7 @@ export const drills = [
   },
 ];
 export type PracticeSession = {
+  outcome?: { successes: number; attempts: number };
   archived?: boolean;
   id: string;
   drillId: string;
@@ -324,7 +325,7 @@ export function suggestedDrill(match: Match) {
 export function isPracticeSession(value: unknown): value is PracticeSession {
   if (!value || typeof value !== "object") return false;
   const s = value as PracticeSession;
-  return typeof s.id === "string" && s.id.length > 0 && drills.some(d => d.id === s.drillId) && validDate(s.date) && Number.isFinite(s.minutes) && s.minutes >= 1 && s.minutes <= 300 && typeof s.notes === "string" && (s.archived === undefined || typeof s.archived === "boolean");
+  return (s.outcome === undefined || isPracticeOutcome(s.outcome)) && typeof s.id === "string" && s.id.length > 0 && drills.some(d => d.id === s.drillId) && validDate(s.date) && Number.isFinite(s.minutes) && s.minutes >= 1 && s.minutes <= 300 && typeof s.notes === "string" && (s.archived === undefined || typeof s.archived === "boolean");
 }
 
 /** Names are matched conservatively: case and spacing only, never fuzzy identity. */
@@ -337,4 +338,28 @@ export function opponentHistory(matches: Match[], opponent: string, end = today(
     ...matchSummary(meetings), meetings,
     surfaces: Object.entries(surfaces).map(([id, label]) => ({ id, label, ...matchSummary(meetings.filter(m => m.surface === id)) })).filter(s => s.total > 0),
   };
+}
+
+
+export const outcomeLabels: Record<string, string> = {
+  serve: "Serves landing in the chosen target",
+  return: "Returns starting a neutral rally",
+  transition: "Approach shots landing in the target",
+};
+export function isPracticeOutcome(value: unknown): value is NonNullable<PracticeSession["outcome"]> {
+  if (!value || typeof value !== "object") return false;
+  const v = value as NonNullable<PracticeSession["outcome"]>;
+  return Number.isInteger(v.successes) && Number.isInteger(v.attempts) && v.attempts >= 1 && v.attempts <= 10000 && v.successes >= 0 && v.successes <= v.attempts;
+}
+export function readPracticeOutcome(successes: string, attempts: string): PracticeSession["outcome"] {
+  if (!successes.trim() && !attempts.trim()) return undefined;
+  const outcome = { successes: Number(successes), attempts: Number(attempts) };
+  if (!successes.trim() || !attempts.trim() || !isPracticeOutcome(outcome)) throw new Error("Enter both counts: successful attempts must be between zero and total attempts (1–10,000).");
+  return outcome;
+}
+export function drillResults(sessions: PracticeSession[], drillId: string, end = today()) {
+  const recorded = sessions.filter(s => s.drillId === drillId && !s.archived && s.date <= end && s.outcome && isPracticeOutcome(s.outcome)).sort((a,b) => b.date.localeCompare(a.date));
+  const successes = recorded.reduce((sum,s) => sum + s.outcome!.successes,0);
+  const attempts = recorded.reduce((sum,s) => sum + s.outcome!.attempts,0);
+  return { recorded, successes, attempts, rate: attempts ? Math.round(successes / attempts * 100) : null };
 }

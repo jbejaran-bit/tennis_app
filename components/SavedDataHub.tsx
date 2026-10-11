@@ -1,10 +1,11 @@
 "use client";
 import { FormEvent, useState } from "react";
-import { Match, PracticeSession, drills, dateLabel, today, isPracticeSession, isLegacyDemo } from "@/lib/baseline/data";
+import { Match, PracticeSession, drills, dateLabel, today, isPracticeSession, isLegacyDemo, readPracticeOutcome } from "@/lib/baseline/data";
 import { Setup } from "@/lib/baseline/racquet";
 import { SaveLocal } from "@/lib/baseline/useLocalData";
 import { setArchived } from "@/lib/baseline/storage";
 import Modal from "./Modal";
+import PracticeOutcome from "./PracticeOutcome";
 type Props = {matches: Match[]; sessions: PracticeSession[]; setups: Setup[]; saveMatches: SaveLocal<Match[]>; saveSessions: SaveLocal<PracticeSession[]>; saveSetups: SaveLocal<Setup[]>; onEditMatch: (m: Match) => void; error: string};
 export default function SavedDataHub({matches,sessions,setups,saveMatches,saveSessions,saveSetups,onEditMatch,error}: Props) {
   const [kind,setKind] = useState("matches");
@@ -23,7 +24,10 @@ export default function SavedDataHub({matches,sessions,setups,saveMatches,saveSe
   function editPractice(e:FormEvent<HTMLFormElement>) {
     e.preventDefault(); if(!editing) return;
     const f = new FormData(e.currentTarget);
-    const updated = {...editing,date:String(f.get('date')),minutes:Number(f.get('minutes')),notes:String(f.get('notes'))};
+    let outcome: PracticeSession["outcome"];
+    try { outcome = readPracticeOutcome(String(f.get('successes') ?? ''), String(f.get('attempts') ?? '')); }
+    catch(e) {setFormError((e as Error).message);return;}
+    const updated = {...editing,outcome,date:String(f.get('date')),minutes:Number(f.get('minutes')),notes:String(f.get('notes'))};
     if(!isPracticeSession(updated) || updated.date > today()) {setFormError('Check the date and minutes before saving.');return;}
     if(saveSessions(current => current.map(s => s.id === updated.id ? {...updated,archived:s.archived} : s))) {setEditing(null);setMessage('Practice entry updated. Progress totals now reflect your correction.');}
     else setFormError('Could not save this edit. Your original entry has been kept.');
@@ -33,6 +37,6 @@ export default function SavedDataHub({matches,sessions,setups,saveMatches,saveSe
   {(message || error) && <p className="notice" role="status">{error || message}</p>}
   {visible.length === 0 ? <div className="empty-state"><h3>{query ? 'No matching records' : archived ? 'Nothing archived' : 'No active records yet'}</h3><p>{query ? 'Try a shorter search or another record type.' : archived ? 'Archived records will appear here with a Restore button.' : 'Save a setup, match or practice session to manage it here.'}</p></div> : <ul className="saved-records">{visible.map(r => <li key={r.id}><div><h3>{r.title}</h3><p>{r.detail}</p></div><div className="button-row">{!archived && kind !== 'setups' && <button className="button" aria-label={`Edit ${r.title}`} onClick={() => {if(kind === 'matches') onEditMatch(matches.find(m => m.id === r.id)!); else {setFormError('');setEditing(sessions.find(s => s.id === r.id)!);}}}>Edit</button>}<button className="button" aria-label={`${archived ? 'Restore' : 'Archive'} ${r.title}`} onClick={() => toggle(r.id)}>{archived ? 'Restore' : 'Archive'}</button></div></li>)}</ul>}
   </section>
-  {editing && <Modal title="Edit practice entry" onClose={() => setEditing(null)}><form className="form-stack" onSubmit={editPractice}><p>{drills.find(d => d.id === editing.drillId)?.title}</p><div className="form-grid"><label className="field">Practice date<input type="date" name="date" max={today()} required defaultValue={editing.date} /></label><label className="field">Minutes practiced<input type="number" name="minutes" min="1" max="300" required defaultValue={editing.minutes} /></label></div><label className="field">Practice notes<textarea name="notes" rows={4} maxLength={2000} defaultValue={editing.notes} /></label>{(formError || error) && <p className="notice" role="alert">{formError || error}</p>}<div className="button-row"><button className="button primary" type="submit">Save changes</button><button className="button" type="button" onClick={() => setEditing(null)}>Cancel</button></div></form></Modal>}
+  {editing && <Modal title="Edit practice entry" onClose={() => setEditing(null)}><form className="form-stack" onSubmit={editPractice}><p>{drills.find(d => d.id === editing.drillId)?.title}</p><div className="form-grid"><label className="field">Practice date<input type="date" name="date" max={today()} required defaultValue={editing.date} /></label><label className="field">Minutes practiced<input type="number" name="minutes" min="1" max="300" required defaultValue={editing.minutes} /></label></div><PracticeOutcome drillId={editing.drillId} initial={editing.outcome} /><label className="field">Practice notes<textarea name="notes" rows={4} maxLength={2000} defaultValue={editing.notes} /></label>{(formError || error) && <p className="notice" role="alert">{formError || error}</p>}<div className="button-row"><button className="button primary" type="submit">Save changes</button><button className="button" type="button" onClick={() => setEditing(null)}>Cancel</button></div></form></Modal>}
   </div>;
 }
