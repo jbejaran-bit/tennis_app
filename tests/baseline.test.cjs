@@ -285,3 +285,19 @@ test("Drill rates are weighted by attempts and exclude missing, archived, future
   assert.deepEqual(r.recorded.map(x=>x.id),["b","a"]);
   assert.equal(drillResults([],"serve","2026-10-11").rate,null);
 });
+
+test("Drill period comparison uses adjacent non-overlapping windows and unrounded rates", () => {
+  const {drillPeriodSummary} = load("lib/baseline/data.ts");
+  const base={id:"x",drillId:"serve",minutes:15,notes:"",outcome:{successes:2,attempts:3}};
+  const r=drillPeriodSummary([{...base,date:"2026-10-11"},{...base,id:"prior",date:"2026-09-13",outcome:{successes:1,attempts:3}},{...base,id:"old",date:"2026-08-16"},{...base,id:"future",date:"2026-10-12"}],"2026-10-11",28);
+  assert.equal(r.start,"2026-09-14");assert.equal(r.previousEnd,"2026-09-13");assert.equal(r.previousStart,"2026-08-17");
+  assert.equal(r.drills[0].current.attempts,3);assert.equal(r.drills[0].previous.attempts,3);assert.equal(r.drills[0].change,33.3);
+  assert.equal(r.drills[1].change,null);
+});
+test("Drill benchmarks retain zero success and respect archives and the expanded window", () => {
+  const {drillPeriodSummary} = load("lib/baseline/data.ts");
+  const base={id:"x",drillId:"serve",minutes:15,notes:"",date:"2026-08-20",outcome:{successes:0,attempts:10}};
+  assert.equal(drillPeriodSummary([base],"2026-10-11",28).drills[0].current.rate,null);
+  assert.equal(drillPeriodSummary([base],"2026-10-11",84).drills[0].current.rate,0);
+  assert.equal(drillPeriodSummary([{...base,archived:true}],"2026-10-11",84).drills[0].current.rate,null);
+});

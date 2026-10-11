@@ -363,3 +363,19 @@ export function drillResults(sessions: PracticeSession[], drillId: string, end =
   const attempts = recorded.reduce((sum,s) => sum + s.outcome!.attempts,0);
   return { recorded, successes, attempts, rate: attempts ? Math.round(successes / attempts * 100) : null };
 }
+
+export function drillPeriodSummary(sessions: PracticeSession[], end: string, days: number) {
+  const start = shiftDate(end, 1 - days);
+  const previousEnd = shiftDate(start, -1);
+  const previousStart = shiftDate(start, -days);
+  return {
+    start, end, previousStart, previousEnd,
+    drills: drills.filter(d => Object.hasOwn(outcomeLabels, d.id)).map(drill => {
+      const current = drillResults(sessions.filter(s => s.date >= start), drill.id, end);
+      const previous = drillResults(sessions.filter(s => s.date >= previousStart), drill.id, previousEnd);
+      const change = current.attempts && previous.attempts
+        ? Math.round((current.successes / current.attempts - previous.successes / previous.attempts) * 1000) / 10 : null;
+      return { id: drill.id, title: drill.title, metric: outcomeLabels[drill.id], current, previous, change };
+    }),
+  };
+}

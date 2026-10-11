@@ -580,7 +580,7 @@ export default function DashboardPage() {
             </>
           )}
           {active === "saved-data" && <SavedDataHub matches={matches.value} sessions={sessions.value} setups={setups.value} saveMatches={matches.save} saveSessions={sessions.save} saveSetups={setups.save} onEditMatch={setForm} error={matches.error || sessions.error || setups.error} />}
-          {active === "progress" && <ProgressHub matches={matches.value} sessions={sessions.value} onLog={() => setForm("new")} onPractice={() => navigate("training")} />}
+          {active === "progress" && <ProgressHub matches={matches.value} sessions={sessions.value} onLog={() => setForm("new")} onPractice={id => id ? practice(id) : navigate("training")} />}
           {active === "racquet-lab" && <RacquetLab />}
           {active === "matches" && (
             <MatchHub
