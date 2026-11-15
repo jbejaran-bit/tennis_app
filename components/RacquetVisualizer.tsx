@@ -1,110 +1,72 @@
 "use client";
-
 import { useId } from "react";
 
-interface RacquetVisualizerProps {
+export type MassLocation = "lead12" | "lead39" | "throat" | "butt";
+type Props = {
   frameColor: string;
   leatherGrip: boolean;
   lead12: number;
   lead39: number;
   leadThroat: number;
-}
+  butt?: number;
+  activePoint?: MassLocation;
+  onSelect?: (point: MassLocation) => void;
+};
 
-export default function RacquetVisualizer({
-  frameColor,
-  leatherGrip,
-  lead12,
-  lead39,
-  leadThroat,
-}: RacquetVisualizerProps) {
-  // Create unique, non-colliding IDs for this specific racquet instance.
-  const rawId = useId();
-  const id = rawId.replace(/:/g, "");
-
-  const dropShadowId = `${id}-drop-shadow`;
-  const paintJobId = `${id}-paint-job`;
-  const leadTapeId = `${id}-lead-tape`;
-  const leatherId = `${id}-leather`;
-  const syntheticId = `${id}-synthetic`;
-
-  return (
-    <div className="w-full flex justify-center items-center p-8 bg-neutral-900 rounded-xl border border-neutral-800 shadow-inner overflow-hidden">
-      <svg viewBox="0 0 200 580" className="w-full h-full max-h-[450px]">
-        <defs>
-          <filter id={dropShadowId} x="-20%" y="-20%" width="140%" height="140%">
-            <feDropShadow dx="0" dy="15" stdDeviation="15" floodOpacity="0.4" />
-          </filter>
-
-          <linearGradient id={paintJobId} x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor={frameColor} />
-            <stop offset="70%" stopColor={frameColor} />
-            <stop offset="100%" stopColor="#262626" />
-          </linearGradient>
-
-          <linearGradient id={leadTapeId} x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stopColor="#d1d5db" />
-            <stop offset="50%" stopColor="#f3f4f6" />
-            <stop offset="100%" stopColor="#9ca3af" />
-          </linearGradient>
-
-          <linearGradient id={leatherId} x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stopColor="#5c3a21" />
-            <stop offset="50%" stopColor="#8b5a2b" />
-            <stop offset="100%" stopColor="#4a2e1b" />
-          </linearGradient>
-
-          <linearGradient id={syntheticId} x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stopColor="#171717" />
-            <stop offset="50%" stopColor="#262626" />
-            <stop offset="100%" stopColor="#0a0a0a" />
-          </linearGradient>
-        </defs>
-
-        <g filter={`url(#${dropShadowId})`}>
-          <g stroke="#ffffff" strokeWidth="1" opacity="0.2">
-            {[...Array(16)].map((_, i) => (
-              <line key={`v-${i}`} x1={45 + i * 7.5} y1="70" x2={45 + i * 7.5} y2="230" />
-            ))}
-            {[...Array(20)].map((_, i) => (
-              <line key={`h-${i}`} x1="30" y1={65 + i * 8.5} x2="170" y2={65 + i * 8.5} />
-            ))}
-          </g>
-
-          <ellipse cx="100" cy="150" rx="70" ry="100" fill="none" stroke={`url(#${paintJobId})`} strokeWidth="14" />
-
-          <path d="M 40 100 A 70 100 0 0 1 160 100" fill="none" stroke="#171717" strokeWidth="16" strokeLinecap="round" />
-
-          <path d="M 60 230 Q 100 260 85 360 L 115 360 Q 100 260 140 230" fill="none" stroke={`url(#${paintJobId})`} strokeWidth="14" strokeLinecap="round" />
-
-          <path d="M 72 245 Q 100 260 128 245" fill="none" stroke={`url(#${paintJobId})`} strokeWidth="12" />
-
-          <rect x="85" y="355" width="30" height="65" fill={`url(#${paintJobId})`} />
-
-          <rect x="82" y="420" width="36" height="135" rx="2" fill={leatherGrip ? `url(#${leatherId})` : `url(#${syntheticId})`} />
-
-          <g stroke="#000000" strokeWidth="1.5" opacity="0.5">
-            {[...Array(12)].map((_, i) => (
-              <line key={`grip-${i}`} x1="82" y1={430 + i * 11} x2="118" y2={445 + i * 11} />
-            ))}
-          </g>
-
-          <rect x="79" y="555" width="42" height="12" rx="2" fill="#171717" />
-          <line x1="79" y1="560" x2="121" y2="560" stroke="#ef4444" strokeWidth="1.5" />
-
-          {lead12 > 0 && (
-            <path d="M 70 55 A 70 100 0 0 1 130 55" fill="none" stroke={`url(#${leadTapeId})`} strokeWidth="16" strokeLinecap="round" />
-          )}
-          {lead39 > 0 && (
-            <>
-              <path d="M 168 120 A 70 100 0 0 1 168 180" fill="none" stroke={`url(#${leadTapeId})`} strokeWidth="16" strokeLinecap="round" />
-              <path d="M 32 120 A 70 100 0 0 0 32 180" fill="none" stroke={`url(#${leadTapeId})`} strokeWidth="16" strokeLinecap="round" />
-            </>
-          )}
-          {leadThroat > 0 && (
-            <path d="M 80 250 Q 100 262 120 250" fill="none" stroke={`url(#${leadTapeId})`} strokeWidth="8" strokeLinecap="round" />
-          )}
+export default function RacquetVisualizer({frameColor,leatherGrip,lead12,lead39,leadThroat,butt=0,activePoint="lead12",onSelect}:Props) {
+  const id=useId().replace(/[^a-zA-Z0-9_-]/g,"");
+  const points:{id:MassLocation;label:string;name:string;mass:number}[]=[
+    {id:"lead12",label:"12 o’clock",name:"tip",mass:lead12},
+    {id:"lead39",label:"3 + 9",name:"side",mass:lead39},
+    {id:"throat",label:"Throat",name:"throat",mass:leadThroat},
+    {id:"butt",label:"Butt cap",name:"butt cap",mass:butt},
+  ];
+  const active=points.find(p=>p.id===activePoint)!;
+  const mark=(point:MassLocation)=>activePoint===point ? "#d2f58a" : "#879782";
+  const mass=(n:number)=>Number.isFinite(n) ? n.toFixed(1)+" g" : "—";
+  return <div className="w-full frame-stage">
+    <svg viewBox="0 0 340 590" role="img" aria-label="Racket diagram showing tip, side, throat and butt-cap mass placements. Use the location buttons below to edit." className="frame-diagram">
+      <defs>
+        <clipPath id={id+"-strings"}><ellipse cx="170" cy="155" rx="65" ry="94" /></clipPath>
+        <linearGradient id={id+"-paint"} x1="0" x2="1" y1="0" y2="1"><stop stopColor={frameColor} /><stop offset=".5" stopColor={frameColor} /><stop offset="1" stopColor="#18201a" /></linearGradient>
+        <linearGradient id={id+"-grip"}><stop stopColor={leatherGrip ? "#49301e" : "#171c18"} /><stop offset=".55" stopColor={leatherGrip ? "#936344" : "#394137"} /><stop offset="1" stopColor={leatherGrip ? "#49301e" : "#151b16"} /></linearGradient>
+        <filter id={id+"-shadow"} x="-50%" y="-30%" width="200%" height="170%"><feDropShadow dx="0" dy="15" stdDeviation="12" floodOpacity=".35" /></filter>
+      </defs>
+      <g className="diagram-guide" fill="none" stroke="#5d6c58" strokeOpacity=".3" strokeWidth="1">
+        <circle cx="170" cy="155" r="129" strokeDasharray="2 9" />
+        <path d="M170 20v565M40 155h260" strokeDasharray="3 9" />
+        <path d="M292 55v506m-5-506h10m-10 506h10" />
+        {[0,1,2,3,4,5,6,7,8,9,10].map(n=><path key={n} d={`M292 ${55+n*50.6}h${n%5===0 ? 9 : 5}`} />)}
+      </g>
+      <g filter={`url(#${id}-shadow)`}>
+        <ellipse cx="170" cy="155" rx="72" ry="102" fill="#0f1612" stroke={`url(#${id}-paint)`} strokeWidth="11" />
+        <g clipPath={`url(#${id}-strings)`} stroke="#d4ded0" strokeWidth=".8" opacity=".38">
+          {Array.from({length:18},(_,i)=><path key={"v"+i} d={`M${107+i*7.4} 48v215`} />)}
+          {Array.from({length:22},(_,i)=><path key={"h"+i} d={`M96 ${55+i*9.5}h150`} />)}
         </g>
-      </svg>
-    </div>
-  );
+        <path d="M108 104C119 37 221 37 232 104" stroke="#263025" strokeWidth="12" fill="none" strokeLinecap="round" />
+        <path d="M128 237Q150 280 157 356M212 237Q190 280 183 356M146 268h48" stroke={`url(#${id}-paint)`} strokeWidth="10" strokeLinecap="round" fill="none" />
+        <path d="M157 356h26v58h-26z" fill={`url(#${id}-paint)`} />
+        <rect x="151" y="410" width="38" height="138" rx="4" fill={`url(#${id}-grip)`} />
+        <g stroke="#71806a" strokeOpacity=".45" strokeWidth="1">{Array.from({length:12},(_,i)=><path key={i} d={`M151 ${411+i*11}l38 12`} />)}</g>
+        <rect x="147" y="547" width="46" height="13" rx="4" fill="#232e23" stroke="#526047" />
+        {lead12>0 && <path d="M148 56q22-10 44 0" fill="none" stroke="#e3e8d8" strokeWidth="11" strokeLinecap="round" />}
+        {lead39>0 && <g fill="none" stroke="#e3e8d8" strokeWidth="11" strokeLinecap="round"><path d="M99 136v38M241 136v38" /></g>}
+        {leadThroat>0 && <path d="M156 268h28" stroke="#e3e8d8" strokeWidth="7" strokeLinecap="round" />}
+        {butt>0 && <path d="M156 552h28" stroke="#e3e8d8" strokeWidth="5" strokeLinecap="round" />}
+      </g>
+      <g className="diagram-annotation">
+        <g fill="none" stroke={mark("lead12")} strokeWidth="1"><path d="M170 55v-23h-69" /><circle cx="170" cy="55" r={activePoint==="lead12" ? 5 : 3} fill={mark("lead12")} /></g>
+        <text x="96" y="29" textAnchor="end" fill={mark("lead12")}>{mass(lead12)}</text>
+        <g fill="none" stroke={mark("lead39")}><path d="M241 155h34" /><circle cx="241" cy="155" r={activePoint==="lead39" ? 5 : 3} fill={mark("lead39")} /></g>
+        <text x="279" y="145" fill={mark("lead39")}>{mass(lead39)}</text>
+        <g fill="none" stroke={mark("throat")}><path d="M170 268H92l-12 12H43" /><circle cx="170" cy="268" r={activePoint==="throat" ? 5 : 3} fill={mark("throat")} /></g>
+        <text x="42" y="272" fill={mark("throat")}>{mass(leadThroat)}</text>
+        <g fill="none" stroke={mark("butt")}><path d="M170 553h81" /><circle cx="170" cy="553" r={activePoint==="butt" ? 5 : 3} fill={mark("butt")} /></g>
+        <text x="257" y="557" fill={mark("butt")}>{mass(butt)}</text>
+      </g>
+    </svg>
+    {onSelect && <div className="frame-location-controls" aria-label="Select a weight location">{points.map(p=><button key={p.id} className={activePoint===p.id ? "selected" : ""} aria-label={`Adjust ${p.name} weight`} aria-pressed={activePoint===p.id} aria-controls={"baseline-mass-"+p.id} onClick={()=>onSelect(p.id)}>{p.label}</button>)}</div>}
+    <div className="frame-caption"><span>{active.label}</span><b>{mass(active.mass)}</b><small>Diagram is illustrative; positions are estimated.</small></div>
+  </div>;
 }

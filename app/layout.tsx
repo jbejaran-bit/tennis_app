@@ -2,10 +2,10 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Baseline — Your Game, in Focus",
+  title: "Baseline Racket Lab — Find your feel",
   description:
-    "Customize your racket, keep a match journal, and make your next practice count.",
-  keywords: ["tennis", "performance", "tracking", "AI", "coaching", "UTR"],
+    "Compare racket setups, plan your practice and remember what happened on court.",
+  robots: {index: false, follow: false},
 };
 
 export default function RootLayout({

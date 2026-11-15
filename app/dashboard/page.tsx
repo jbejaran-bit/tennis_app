@@ -2,7 +2,12 @@
 import { ChangeEvent, useEffect, useState } from "react";
 import Link from "next/link";
 import Icon, { IconName } from "@/components/Icons";
+import Modal from "@/components/Modal";
+import { Backup, parseBackup, prepareBackup, applyBackup } from "@/lib/baseline/backup";
 import SavedDataHub from "@/components/SavedDataHub";
+import WorkspaceSearch from "@/components/WorkspaceSearch";
+import StartGuide from "@/components/StartGuide";
+import { SessionPlan,SESSION_PLAN_KEY,isSessionPlan,nextPractice } from "@/lib/baseline/session-plan";
 import ProgressHub from "@/components/ProgressHub";
 import RacquetLab from "@/components/RacquetLab";
 import TrainingHub, { LessonsHub } from "@/components/TrainingHub";
@@ -21,37 +26,37 @@ import {
   drills,
   downloadJson,
 } from "@/lib/baseline/data";
-import { Setup, isSetup, calculateSetup } from "@/lib/baseline/racquet";
-import { mergeById, readStored } from "@/lib/baseline/storage";
-import { createClient } from "@/lib/supabase/client";
+import { Setup, isSetup, calculateSetup, RacketTrial, validRacketTrials, validMatchDayChoice, finalCondition } from "@/lib/baseline/racquet";
+import { readStored } from "@/lib/baseline/storage";
 import "./workspace.css";
 type Tab =
-  "saved-data" | "progress" | "overview" | "racquet-lab" | "matches" | "training" | "lessons" | "gallery";
+  "start" | "saved-data" | "progress" | "overview" | "racquet-lab" | "matches" | "training" | "lessons" | "gallery";
 const tabs: { id: Tab; name: string; icon: IconName; description: string }[] = [
+  {id:"start",name:"Start here",icon:"overview",description:"A quick guide to your rackets, practice and match notes."},
   {
     id: "overview",
     name: "Overview",
     icon: "overview",
-    description: "A little intention. A better next session.",
+    description: "Your recent activity and plans for the court.",
   },
   {
     id: "racquet-lab",
     name: "Racket Lab",
     icon: "racket",
-    description: "Find your feel. Build, save and compare your setups.",
+    description: "Save racket specs, compare setups and record how they play.",
   },
   {
     id: "matches",
     name: "Match log",
     icon: "matches",
-    description: "Remember the patterns. Take something into your next match.",
+    description: "Scores, equipment and notes from your matches.",
   },
-  { id: "progress", name: "Progress", icon: "overview", description: "See your practice rhythm and the patterns in your results." },
+  { id: "progress", name: "Progress", icon: "progress", description: "See your practice rhythm and the patterns in your results." },
   {
     id: "training",
     name: "Training",
     icon: "training",
-    description: "A clear target for every session.",
+    description: "Choose drills, build a session and log your practice.",
   },
   {
     id: "lessons",
@@ -64,7 +69,7 @@ const tabs: { id: Tab; name: string; icon: IconName; description: string }[] = [
     id: "gallery",
     name: "Video journal",
     icon: "video",
-    description: "Watch your game with a purpose.",
+    description: "Save clips and notes from your time on court.",
   },
 ];
 const validMatches = (v: unknown): v is Match[] =>
@@ -124,10 +129,14 @@ function Stat({
   );
 }
 export default function DashboardPage() {
-  const [active, setActive] = useState<Tab>("overview");
-  const [email, setEmail] = useState("");
+  const [active, setActive] = useState<Tab>("racquet-lab");
+  const [menuOpen,setMenuOpen]=useState(false);
+  const [pendingBackup,setPendingBackup]=useState<{data:Backup;name:string;preview:ReturnType<typeof prepareBackup>}|null>(null);
+  const [importError,setImportError]=useState("");
   const [form, setForm] = useState<Match | "new" | null>(null);
   const [initialDrill, setInitialDrill] = useState("");
+  const [initialLabSetup,setInitialLabSetup]=useState<Setup|null>(null);
+  const [selectedMatchId,setSelectedMatchId]=useState("");
   const [notice, setNotice] = useState("");
   const matches = useLocalData<Match[]>("baseline_matches", [], validMatches);
   const sessions = useLocalData<PracticeSession[]>(
@@ -136,30 +145,24 @@ export default function DashboardPage() {
     validSessions,
   );
   const setups = useLocalData<Setup[]>("baseline_setups_v2", [], validSetups);
+  const sessionPlan=useLocalData<SessionPlan>(SESSION_PLAN_KEY,[],isSessionPlan);
+  const matchDay=useLocalData<string>("baseline_match_day_v1","",validMatchDayChoice);
+  const racketTrials = useLocalData<RacketTrial[]>("baseline_racket_trials_v1",[],validRacketTrials);
   useEffect(() => {
     const readHash = () => {
       const id = window.location.hash.slice(1).split("?")[0];
-      if (!id) setActive("overview");
+      if (!id) {
+        setActive("racquet-lab");
+      }
       else if (tabs.some((t) => t.id === id)) setActive(id as Tab);
     };
     readHash();
     window.addEventListener("hashchange", readHash);
     return () => window.removeEventListener("hashchange", readHash);
   }, []);
-  useEffect(() => {
-    if (
-      process.env.NEXT_PUBLIC_SUPABASE_URL &&
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-    ) {
-      try {
-        createClient()
-          .auth.getSession()
-          .then(({ data }) => setEmail(data.session?.user.email || ""))
-          .catch(() => {});
-      } catch {}
-    }
-  }, []);
   const navigate = (id: Tab) => {
+    setMenuOpen(false);
+    if(id!=="start")try{localStorage.setItem("baseline_start_state","done");}catch{}
     setActive(id);
     if (window.location.hash !== `#${id}`) window.history.pushState(null, "", `#${id}`);
     window.scrollTo({ top: 0, behavior: "instant" });
@@ -169,17 +172,19 @@ export default function DashboardPage() {
     setInitialDrill(id);
     navigate("training");
   };
-  const stats = matchSummary(matches.value);
+  const stats = matchSummary(matches.value.filter(m=>m.date<=today()));
   const real = matches.value
-    .filter((m) => !m.archived && !isLegacyDemo(m))
+    .filter((m) => !m.archived && !isLegacyDemo(m) && m.date<=today())
     .sort((a, b) => b.date.localeCompare(a.date));
+  const nextSession=nextPractice(matches.value);
   const recent = real.slice(0, 5);
-  const practiceMinutes = sessions.value.filter(s => !s.archived).reduce((a, s) => a + s.minutes, 0);
-  const lastSetup = setups.value.filter(s => !s.archived).at(-1);
+  const practiceMinutes = sessions.value.filter(s => !s.archived && s.date<=today()).reduce((a, s) => a + s.minutes, 0);
+  const matchDaySetup=setups.value.find(s=>s.id===matchDay.value && !s.archived && finalCondition(s)==="strung");
+  const lastSetup = matchDaySetup || setups.value.filter(s => !s.archived).at(-1);
   const frame = lastSetup ? calculateSetup(lastSetup) : null;
   const activeInfo = tabs.find((t) => t.id === active)!;
   function saveMatch(m: Match) {
-    if (!isMatch(m) || !m.opponent || !m.score) {
+    if (!isMatch(m) || !m.opponent || !m.score || m.date>today()) {
       setNotice("Check the match details before saving.");
       return;
     }
@@ -191,6 +196,7 @@ export default function DashboardPage() {
       )
     ) {
       setForm(null);
+      setSelectedMatchId(m.id);
       navigate("matches");
       setNotice("Match saved on this device.");
     }
@@ -198,7 +204,10 @@ export default function DashboardPage() {
   function exportBackup() {
     try {
       downloadJson(`baseline-backup-${today()}.json`, {
-        version: 2,
+        version: 3,
+        sessionPlan: readStored(localStorage,SESSION_PLAN_KEY,[],isSessionPlan),
+        matchDaySetupId: readStored(localStorage,"baseline_match_day_v1","",validMatchDayChoice),
+        racketTrials: readStored(localStorage, "baseline_racket_trials_v1", [], validRacketTrials),
         matches: readStored(localStorage, "baseline_matches", [], validMatches),
         practice: readStored(
           localStorage,
@@ -220,41 +229,33 @@ export default function DashboardPage() {
     if (!file) return;
     try {
       if (file.size > 5 * 1024 * 1024) throw new Error();
-      const data = JSON.parse(await file.text());
-      if (
-        data.version !== 2 ||
-        !validMatches(data.matches) ||
-        !validSessions(data.practice) ||
-        !validSetups(data.setups)
-      )
-        throw new Error();
-      const a = matches.save((current) => mergeById(current, data.matches));
-      const b = sessions.save((current) => mergeById(current, data.practice));
-      const c = setups.save((current) => mergeById(current, data.setups));
-      setNotice(
-        a && b && c
-          ? "Backup imported. Existing entries with the same ID were kept."
-          : "Some entries could not be saved. Your original backup file is unchanged.",
-      );
+      const data = parseBackup(await file.text());
+      const preview = prepareBackup(localStorage,data);
+      setImportError("");
+      setPendingBackup({data,name:file.name || "Baseline backup",preview});
     } catch {
       setNotice(
-        "This backup could not be imported. Use a Baseline v2 JSON backup under 5 MB.",
+        "This backup could not be imported. Use a Baseline v2 or v3 JSON backup under 5 MB.",
       );
     } finally {
       e.target.value = "";
     }
   }
-  async function signOut() {
+  function confirmImport() {
+    if(!pendingBackup)return;
     try {
-      await createClient().auth.signOut();
-      setEmail("");
-    } catch {
-      setNotice("Could not sign out. Please try again.");
+      const keys=applyBackup(localStorage,pendingBackup.data);
+      keys.forEach(key=>window.dispatchEvent(new CustomEvent("baseline-data",{detail:key})));
+      setPendingBackup(null);
+      setNotice("Backup imported. Existing entries with the same ID and your existing court plan were kept.");
+    } catch(error) {
+      pendingBackup.preview.rows.forEach(row=>window.dispatchEvent(new CustomEvent("baseline-data",{detail:row.key})));
+      setImportError(error instanceof Error ? error.message : "Import could not be saved. Keep your original backup and try again.");
     }
   }
   return (
     <div className="baseline-workspace">
-      <a href="#workspace-content" className="skip-link">
+      <a href="#workspace-content" className="skip-link" onClick={e=>{e.preventDefault();document.getElementById("workspace-content")?.focus();}}>
         Skip to content
       </a>
       <aside className="sidebar">
@@ -266,9 +267,14 @@ export default function DashboardPage() {
             baseline<small>YOUR GAME, IN FOCUS</small>
           </span>
         </Link>
-        <div className="nav-caption">WORKSPACE</div>
         <nav aria-label="Main navigation">
-          {tabs.map((t) => (
+          {([
+            {label:"YOUR WORKSPACE",ids:["racquet-lab","overview","progress"]},
+            {label:"ON COURT",ids:["matches","training","lessons","gallery"]},
+            {label:"MANAGE",ids:["saved-data","start"]},
+          ] as {label:string;ids:Tab[]}[]).map(group=><div className="nav-group" key={group.label}>
+          <div className="nav-group-label">{group.label}</div>
+          {group.ids.map(id=>tabs.find(t=>t.id===id)!).map((t) => (
             <button
               key={t.id}
               onClick={() => navigate(t.id)}
@@ -279,7 +285,7 @@ export default function DashboardPage() {
               <span>{t.name}</span>
               {t.id === "racquet-lab" && <i className="nav-dot" />}
             </button>
-          ))}
+          ))}</div>)}
         </nav>
         <div className="sidebar-bottom">
           <div className="device-note">
@@ -292,7 +298,7 @@ export default function DashboardPage() {
           <button
             className="text-button"
             onClick={exportBackup}
-            disabled={!matches.ready || !sessions.ready}
+            disabled={!matches.ready || !sessions.ready || !setups.ready || !racketTrials.ready || !matchDay.ready || !sessionPlan.ready}
           >
             <Icon name="download" />
             Export backup
@@ -313,18 +319,13 @@ export default function DashboardPage() {
           <span className="breadcrumb">
             Workspace <span>/</span> <b>{activeInfo.name}</b>
           </span>
-          <div className="account">
-            <span className="status-dot" />
-            <span>{email || "Personal workspace"}</span>
-            {email ? (
-              <button onClick={signOut}>Sign out</button>
-            ) : (
-              <Link href="/auth/login">Sign in</Link>
-            )}
+          <div className="workspace-topbar-actions">
+          <button className="button primary quick-match" onClick={()=>setForm("new")}><Icon name="plus" /><span>Log match</span></button>
+          <WorkspaceSearch pages={tabs} setups={setups.value} onNavigate={id=>navigate(id as Tab)} onPractice={practice} onSetup={s=>{setInitialLabSetup(s);navigate("racquet-lab");}} />
           </div>
         </header>
-        <main id="workspace-content" className="workspace-content">
-          <div className="page-heading">
+        <main id="workspace-content" className="workspace-content" tabIndex={-1}>
+          <div className={`page-heading${active==="racquet-lab" ? " racket-page-heading" : ""}`}>
             <div>
               <div className="eyebrow">
                 {active === "overview"
@@ -333,7 +334,7 @@ export default function DashboardPage() {
               </div>
               <h1>
                 {active === "overview"
-                  ? "Make your next session count."
+                  ? "Your tennis at a glance."
                   : activeInfo.name}
               </h1>
               <p>{activeInfo.description}</p>
@@ -345,28 +346,28 @@ export default function DashboardPage() {
               </button>
             )}
           </div>
-          {(notice || matches.error || sessions.error) && (
+          {(notice || matches.error || sessions.error || setups.error || racketTrials.error || matchDay.error || sessionPlan.error) && (
             <p className="notice" role="status">
-              {notice || matches.error || sessions.error}
+              {notice || matches.error || sessions.error || setups.error || racketTrials.error || matchDay.error || sessionPlan.error}
             </p>
           )}
+          {active === "start" && <StartGuide onRacket={()=>navigate("racquet-lab")} onTraining={()=>navigate("training")} onMatch={()=>setForm("new")} onProgress={()=>navigate("progress")} onVideo={()=>navigate("gallery")} onExport={exportBackup} canExport={matches.ready && sessions.ready && setups.ready && racketTrials.ready && matchDay.ready && sessionPlan.ready} hasSetup={setups.value.some(s=>!s.archived)} hasPractice={sessions.value.some(s=>!s.archived && s.date<=today())} hasMatch={real.length>0} dataAvailable={matches.ready && sessions.ready && setups.ready && !matches.error && !sessions.error && !setups.error} />}
           {active === "overview" && (
             <>
               <section className="overview-hero">
                 <div className="hero-copy">
                   <span className="hero-tag">
                     <span className="status-dot" />
-                    THE DETAILS MAKE THE DIFFERENCE
+                    Your racket notebook
                   </span>
                   <h2>
-                    Your racket.
+                    Keep track of
                     <br />
-                    Your feel. <em>Your game.</em>
+                    <em>what feels right.</em>
                   </h2>
                   <p>
-                    Explore a few grams here, a new balance there.
-                    <br className="desktop-only" /> Make your next change with a
-                    clearer picture.
+                    Save your current setup, compare a change, and record how it played.
+                    Your notes will be here when it’s time to restring or try again.
                   </p>
                   <button
                     className="button primary"
@@ -377,7 +378,7 @@ export default function DashboardPage() {
                 </div>
                 <CourtArt />
                 <span className="court-caption">
-                  BUILD IT. COMPARE IT. TAKE IT TO COURT.
+                  Specs are a starting point. The court is the test.
                 </span>
               </section>
               <section
@@ -410,7 +411,7 @@ export default function DashboardPage() {
                 <Stat
                   label="PRACTICE TIME"
                   value={practiceMinutes ? practiceMinutes + " min" : "—"}
-                  note={`${sessions.value.filter(s => !s.archived).length} sessions in your journal`}
+                  note={`${sessions.value.filter(s => !s.archived && s.date<=today()).length} sessions in your journal`}
                 />
               </section>
               <div className="overview-grid">
@@ -418,7 +419,7 @@ export default function DashboardPage() {
                   <div className="section-heading">
                     <div className="eyebrow">
                       <Icon name="racket" />
-                      YOUR EQUIPMENT
+                      {matchDaySetup ? "YOUR MATCH-DAY SETUP" : "YOUR EQUIPMENT"}
                     </div>
                     <button
                       className="text-button"
@@ -451,7 +452,7 @@ export default function DashboardPage() {
                       <span>BALANCE</span>
                     </div>
                     <div>
-                      <strong>{frame?.swingweight?.toFixed(0) || "—"}</strong>
+                      <strong>{frame?.swingweight?.toFixed(0) ?? "—"}</strong>
                       <span>SW ESTIMATE</span>
                     </div>
                   </div>
@@ -473,26 +474,26 @@ export default function DashboardPage() {
                 <section className="panel next-practice">
                   <div className="section-heading">
                     <div className="eyebrow">NEXT ON COURT</div>
-                    <span className="badge">15 MIN / SOLO</span>
+                    <span className="badge">{nextSession.drill.minutes} MIN / {nextSession.drill.mode.toUpperCase()}</span>
                   </div>
                   <span className="session-number">
-                    01 <span>/ SERVE</span>
+                    01 <span>/ {nextSession.drill.category.toUpperCase()}</span>
                   </span>
-                  <h2>Serve with a destination.</h2>
+                  <h2>{nextSession.drill.title}</h2>
                   <p>
-                    Three targets. Thirty serves. Give every ball a purpose and
-                    keep a result you can improve.
+                    {nextSession.reason}
                   </p>
                   <div className="practice-target">
                     <Icon name="check" />
-                    Target: record hits out of 30 serves
+                    Target: {nextSession.drill.target}
                   </div>
                   <button
                     className="text-button"
-                    onClick={() => practice("serve")}
+                    onClick={() => practice(nextSession.drill.id)}
                   >
                     View session plan <Icon name="arrow" />
                   </button>
+                  {sessionPlan.value.length>0 && <div className="overview-court-plan"><span className="eyebrow">YOUR SAVED COURT PLAN</span><b>{sessionPlan.value.reduce((sum,b)=>sum+b.minutes,0)} minutes · {sessionPlan.value.length} {sessionPlan.value.length===1 ? "block" : "blocks"}</b><p>{sessionPlan.value.map(b=>drills.find(d=>d.id===b.drillId)!.title).join(" → ")}</p><button className="text-button" onClick={()=>navigate("training")}>Open your court plan <Icon name="arrow" /></button></div>}
                 </section>
               </div>
               <div className="overview-grid lower-grid">
@@ -512,7 +513,7 @@ export default function DashboardPage() {
                         <button
                           className="match-row"
                           key={m.id}
-                          onClick={() => navigate("matches")}
+                          onClick={() => {setSelectedMatchId(m.id);navigate("matches");}}
                         >
                           <span className={`result-mark ${m.result}`}>
                             {m.result === "win" ? "W" : "L"}
@@ -579,21 +580,24 @@ export default function DashboardPage() {
               </div>
             </>
           )}
-          {active === "saved-data" && <SavedDataHub matches={matches.value} sessions={sessions.value} setups={setups.value} saveMatches={matches.save} saveSessions={sessions.save} saveSetups={setups.save} onEditMatch={setForm} error={matches.error || sessions.error || setups.error} />}
+          {active === "saved-data" && <SavedDataHub matches={matches.value} sessions={sessions.value} setups={setups.value} saveMatches={matches.save} saveSessions={sessions.save} saveSetups={setups.save} onEditMatch={setForm} onOpenSetup={s=>{setInitialLabSetup(s);navigate("racquet-lab");}} error={matches.error || sessions.error || setups.error} />}
           {active === "progress" && <ProgressHub matches={matches.value} sessions={sessions.value} onLog={() => setForm("new")} onPractice={id => id ? practice(id) : navigate("training")} />}
-          {active === "racquet-lab" && <RacquetLab />}
+          {active === "racquet-lab" && <RacquetLab initialSetup={initialLabSetup} onInitialSetupLoaded={()=>setInitialLabSetup(null)} />}
           {active === "matches" && (
             <MatchHub
               matches={matches.value.filter(m => !m.archived)}
               onLog={() => setForm("new")}
               onEdit={setForm}
               onPractice={practice}
+              initialSelectedId={selectedMatchId}
+              onSelectMatch={setSelectedMatchId}
+              onReviewSetup={s=>{setInitialLabSetup({...s,id:"",archived:false,name:s.name.slice(0,70)+" review"});navigate("racquet-lab");}}
             />
           )}
           {active === "training" && (
             <TrainingHub
               key={initialDrill}
-              sessions={sessions.value.filter(s => !s.archived)}
+              sessions={sessions.value.filter(s => !s.archived && s.date<=today())}
               saveSessions={sessions.save}
               error={sessions.error}
               initialDrill={initialDrill}
@@ -618,15 +622,38 @@ export default function DashboardPage() {
           </div>
           <footer className="workspace-footer">
             <span>
-              baseline <b>·</b> Built for the time between matches.
+              baseline <b>·</b> Your tennis notebook.
             </span>
-            <span>Your next improvement starts with a detail.</span>
+            <span>Records are saved in this browser.</span>
           </footer>
         </main>
       </div>
+      <nav className="mobile-dock" aria-label="Mobile navigation">
+        {(["racquet-lab","training","matches"] as Tab[]).map(id=>{
+          const tab=tabs.find(t=>t.id===id)!;
+          return <button key={id} onClick={()=>navigate(id)} aria-current={active===id ? "page":undefined}><Icon name={tab.icon}/><span>{id==="racquet-lab" ? "Racket Lab":id==="matches" ? "Matches":"Training"}</span></button>;
+        })}
+        <button onClick={()=>setMenuOpen(true)} aria-label="More pages" aria-haspopup="dialog" aria-expanded={menuOpen} className={!["racquet-lab","training","matches"].includes(active) ? "active":""}><Icon name="overview"/><span>More</span></button>
+      </nav>
+      {menuOpen && <Modal title="Your workspace" onClose={()=>setMenuOpen(false)}>
+        <p className="menu-intro">Everything you need, between matches.</p>
+        <nav className="workspace-menu" aria-label="All workspace pages">
+          {tabs.map(tab=><button key={tab.id} onClick={()=>navigate(tab.id)} aria-current={active===tab.id ? "page":undefined}><Icon name={tab.icon}/><span><strong>{tab.name}</strong><small>{tab.description}</small></span><Icon name="arrow"/></button>)}
+        </nav>
+      </Modal>}
+      {pendingBackup && <Modal title="Review your backup" onClose={()=>setPendingBackup(null)}>
+        <p className="menu-intro backup-filename">{pendingBackup.name}</p>
+        <p>New records will be added. Existing records with matching IDs stay unchanged. Repeated IDs in the file are skipped.</p>
+        <div className="backup-review"><table><caption>Records in this backup</caption><thead><tr><th scope="col">Record type</th><th scope="col">To add</th><th scope="col">Skipped</th></tr></thead><tbody>{pendingBackup.preview.rows.map(row=><tr key={row.key}><th scope="row">{row.label}</th><td>{row.added}</td><td>{row.kept}</td></tr>)}</tbody></table></div>
+        {pendingBackup.preview.planKept && <p>Your current court plan will be kept.</p>}
+        <p className="menu-intro">Video clips are not included. Counts are checked again when you import, so records saved in another tab are kept.</p>
+        {importError && <p role="alert">{importError}</p>}
+        <div className="import-actions"><button className="button secondary" onClick={()=>setPendingBackup(null)}>Cancel import</button><button className="button primary" onClick={confirmImport}>Import records</button></div>
+      </Modal>}
       {form && (
         <MatchForm
           setups={setups.value.filter(s => !s.archived)}
+          preferredSetupId={matchDaySetup?.id}
           error={matches.error}
           initial={form === "new" ? undefined : form}
           onSave={saveMatch}

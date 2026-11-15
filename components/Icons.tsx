@@ -10,8 +10,12 @@ export type IconName =
   | "plus"
   | "check"
   | "download"
-  | "close";
+  | "close"
+  | "progress"
+  | "lock";
 const paths: Record<IconName, React.ReactNode> = {
+  progress: <><path d="M4 4v16h16M7 15l4-5 4 3 5-7" /><circle cx="11" cy="10" r="1" /><circle cx="15" cy="13" r="1" /></>,
+  lock: <><rect x="5" y="10" width="14" height="11" rx="2" /><path d="M8 10V6a4 4 0 0 1 8 0v4M12 14v3" /></>,
   overview: (
     <>
       <rect x="3" y="3" width="7" height="7" rx="1.5" />

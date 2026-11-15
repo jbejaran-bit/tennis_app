@@ -1,4 +1,5 @@
 "use client";
+import { createRecordId } from "@/lib/baseline/record-id";
 import { useEffect, useRef, useState } from "react";
 import { saveVideo } from "@/lib/baseline/videos";
 import Icon from "./Icons";
@@ -50,8 +51,6 @@ export default function StrokeRecorder({
   async function start() {
     setError("");
     setStarting(true);
-    setSaved(false);
-    setBlob(null);
     try {
       if (
         !navigator.mediaDevices?.getUserMedia ||
@@ -87,8 +86,10 @@ export default function StrokeRecorder({
         const video = new Blob(chunks.current, {
           type: r.mimeType || "video/webm",
         });
-        setBlob(video);
         setRecording(false);
+        if(!video.size){setError("The camera did not capture a playable clip. Try again or add one from your device.");return;}
+        setBlob(video);
+        setSaved(false);
         onRecorded?.(video);
       };
       r.onerror = () => {
@@ -101,10 +102,13 @@ export default function StrokeRecorder({
         }
       };
       r.start(1000);
+      setSaved(false);
+      setBlob(null);
       setRecording(true);
     } catch (e) {
       stream.current?.getTracks().forEach((t) => t.stop());
-      setError(e instanceof Error ? e.message : "Could not access camera.");
+      stream.current = null;
+      if(mounted.current)setError(e instanceof Error ? e.message : "Could not access camera.");
     } finally {
       if (mounted.current) setStarting(false);
     }
@@ -114,7 +118,7 @@ export default function StrokeRecorder({
     setSaving(true);
     try {
       await saveVideo({
-        id: crypto.randomUUID(),
+        id: createRecordId(),
         title: lessonTitle || "Practice recording",
         createdAt: new Date().toISOString(),
         blob,
@@ -155,7 +159,7 @@ export default function StrokeRecorder({
             Stop recording
           </button>
         ) : (
-          <button className="button" disabled={starting} onClick={start}>
+          <button className="button" disabled={starting || saving} onClick={start}>
             <Icon name="video" />
             {starting
               ? "Opening camera…"

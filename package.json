@@ -15,8 +15,6 @@
   "license": "ISC",
   "type": "module",
   "dependencies": {
-    "@supabase/ssr": "^0.10.3",
-    "@supabase/supabase-js": "^2.106.2",
     "autoprefixer": "^10.5.0",
     "next": "^16.2.6",
     "postcss": "^8.5.15",
@@ -27,6 +25,7 @@
   "devDependencies": {
     "@types/node": "25.9.1",
     "@types/react": "19.2.15",
+    "jsdom": "^26.1.0",
     "tailwindcss": "^3.4.19"
   }
 }
