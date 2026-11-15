@@ -5,6 +5,20 @@ export type LocalVideo = {
   blob: Blob;
   notes: string;
 };
+const videoExtensions = /\.(mp4|m4v|mov|webm|ogv|ogg|avi|mkv|3gp|3g2)$/i;
+/** Some phone/file providers omit MIME metadata. Never infer a different container. */
+export function isVideoFile(file: Pick<File, "type" | "name">): boolean {
+  return file.type.toLowerCase().startsWith("video/") ||
+    ((!file.type || file.type === "application/octet-stream") && videoExtensions.test(file.name));
+}
+export function videoFilename(video: Pick<LocalVideo, "title" | "blob">): string {
+  const original = "name" in video.blob && typeof video.blob.name === "string" ? video.blob.name : "";
+  const originalExtension = original.match(videoExtensions)?.[0];
+  const mime = video.blob.type.toLowerCase().split(";")[0].trim();
+  const extensions: Record<string, string> = {"video/mp4":".mp4", "video/x-m4v":".m4v", "video/quicktime":".mov", "video/webm":".webm", "video/ogg":".ogv", "video/x-msvideo":".avi", "video/x-matroska":".mkv", "video/3gpp":".3gp", "video/3gpp2":".3g2"};
+  const title = video.title.replace(/[<>:"/\\|?*\u0000-\u001f]/g, "").trim().replace(/[. ]+$/, "").slice(0, 120) || "practice-clip";
+  return title.replace(videoExtensions, "") + (originalExtension || extensions[mime] || "");
+}
 function openDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open("baseline-video-journal", 1);

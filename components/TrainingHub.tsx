@@ -1,4 +1,6 @@
 "use client";
+import { createRecordId } from "@/lib/baseline/record-id";
+import ResetFormButton from "./ResetFormButton";
 import { FormEvent, useState } from "react";
 import {
   drills,
@@ -9,11 +11,13 @@ import {
   readPracticeOutcome,
   drillResults,
   outcomeLabels,
+  isPracticeSession,
 } from "@/lib/baseline/data";
 import { SaveLocal } from "@/lib/baseline/useLocalData";
 import Modal from "./Modal";
 import Icon from "./Icons";
 import PracticeOutcome from "./PracticeOutcome";
+import SessionPlanner from "./SessionPlanner";
 export function LessonsHub({
   onPractice,
 }: {
@@ -45,7 +49,7 @@ export function LessonsHub({
             onClick={() => setActive(active === lesson.id ? null : lesson.id)}
             aria-expanded={active === lesson.id}
           >
-            {active === lesson.id ? "Close guide" : "Read the pattern"}{" "}
+            {active === lesson.id ? "Close guide" : "View drill"}{" "}
             <Icon name="arrow" />
           </button>
           {active === lesson.id && (
@@ -56,7 +60,7 @@ export function LessonsHub({
                 ))}
               </ol>
               <div className="focus-note">
-                <span>AFTER YOUR SESSION</span>
+                <span>After practice</span>
                 <p>{lesson.question}</p>
               </div>
               <button
@@ -86,6 +90,7 @@ export default function TrainingHub({
   const [filter, setFilter] = useState("All");
   const [active, setActive] = useState(initialDrill || "");
   const [log, setLog] = useState(false);
+  const [plannedMinutes,setPlannedMinutes]=useState<number|null>(null);
   const [notice, setNotice] = useState("");
   const [formError, setFormError] = useState("");
   const results = drillResults(sessions, active);
@@ -94,34 +99,32 @@ export default function TrainingHub({
     e.preventDefault();
     const f = new FormData(e.currentTarget);
     const minutes = Number(f.get("minutes"));
-    if (!drill || !Number.isFinite(minutes) || minutes < 1 || minutes > 300)
-      return;
+    if (!drill) return;
     let outcome: PracticeSession["outcome"];
     try { outcome = readPracticeOutcome(String(f.get("successes") ?? ""), String(f.get("attempts") ?? "")); }
     catch (e) { setFormError((e as Error).message); return; }
-    if (
-      saveSessions((current) => [
-        {
-          id: crypto.randomUUID(),
-          drillId: drill.id,
-          date: String(f.get("date")),
-          minutes,
-          outcome,
-          notes: String(f.get("notes")),
-        },
-        ...current,
-      ])
-    ) {
+    const item:PracticeSession = {
+      id: createRecordId(),
+      drillId: drill.id,
+      date: String(f.get("date")),
+      minutes,
+      outcome,
+      notes: String(f.get("notes")),
+    };
+    if(!isPracticeSession(item) || item.date>today()) {setFormError("Check the date and minutes. Log a completed practice on a past or current date, with 1–300 minutes.");return;}
+    if (saveSessions(current=>[item,...current])) {
       setLog(false);
       setNotice(
         "Practice saved. Your journal and drill results are updated.",
       );
-    }
+    } else setFormError("Practice could not be saved. Check device storage before trying again; your form is still here.");
   }
   return (
+    <div className="training-workspace">
+      <SessionPlanner onLog={(id,minutes)=>{setActive(id);setPlannedMinutes(minutes);setFormError("");setLog(true);}} />
     <div className="training-layout">
       <div>
-        <div className="filter-row" aria-label="Filter drills">
+        <button className="text-button" onClick={()=>{setFilter("All");setActive("");}}>Reset drill selection</button><div className="filter-row" aria-label="Filter drills">
           {["All", "Solo", "Partner", "Wall"].map((f) => (
             <button
               key={f}
@@ -189,7 +192,7 @@ export default function TrainingHub({
       <aside className="panel training-detail">
         {drill ? (
           <>
-            <div className="eyebrow">YOUR NEXT SESSION</div>
+            <div className="eyebrow">Practice plan</div>
             <h2>{drill.title}</h2>
             <div className="pill-row">
               <span className="badge">{drill.minutes} MIN</span>
@@ -209,12 +212,12 @@ export default function TrainingHub({
             <p className="helper">Bring: {drill.equipment}</p>
             <button
               className="button primary full"
-              onClick={() => { setFormError(""); setLog(true); }}
+              onClick={() => { setPlannedMinutes(null);setFormError(""); setLog(true); }}
             >
               <Icon name="check" />
               Log this practice
             </button>
-            {outcomeLabels[drill.id] && <section className="drill-results" aria-label="Your drill results"><div className="eyebrow">YOUR DRILL RESULTS</div><h3>{results.rate === null ? "Start your benchmark" : `${results.rate}% target success`}</h3>{results.rate === null ? <p>Record successful and total attempts when logging this drill. Your results will appear here.</p> : <><p>{results.successes} successful / {results.attempts} attempts across {results.recorded.length} recorded sessions.</p><div className="table-wrap"><table><caption>Most recent recorded results</caption><thead><tr><th>Date</th><th>Result</th><th>Rate</th></tr></thead><tbody>{results.recorded.slice(0,5).map(s => <tr key={s.id}><th>{dateLabel(s.date)}</th><td>{s.outcome!.successes}/{s.outcome!.attempts}</td><td>{Math.round(s.outcome!.successes / s.outcome!.attempts * 100)}%</td></tr>)}</tbody></table></div></>}<p className="helper">Compare sessions with similar targets and conditions. Totals use recorded attempts only; untracked and archived sessions are excluded.</p></section>}
+            {outcomeLabels[drill.id] && <section className="drill-results" aria-label="Your drill results"><div className="eyebrow">Drill results</div><h3>{results.rate === null ? "Record your first result" : `${results.rate}% target success`}</h3>{results.rate === null ? <p>Record successful and total attempts when logging this drill. Your results will appear here.</p> : <><p>{results.successes} successful / {results.attempts} attempts across {results.recorded.length} recorded sessions.</p><div className="table-wrap"><table><caption>Most recent recorded results</caption><thead><tr><th>Date</th><th>Result</th><th>Rate</th></tr></thead><tbody>{results.recorded.slice(0,5).map(s => <tr key={s.id}><th>{dateLabel(s.date)}</th><td>{s.outcome!.successes}/{s.outcome!.attempts}</td><td>{Math.round(s.outcome!.successes / s.outcome!.attempts * 100)}%</td></tr>)}</tbody></table></div></>}<p className="helper">Compare sessions with similar targets and conditions. Totals use recorded attempts only; untracked and archived sessions are excluded.</p></section>}
 
           </>
         ) : (
@@ -232,7 +235,7 @@ export default function TrainingHub({
       </aside>
       {log && drill && (
         <Modal title="Log your practice" onClose={() => setLog(false)}>
-          <form onSubmit={save} className="form-stack">
+          <form onSubmit={save} className="form-stack" onReset={()=>{setFormError("");}}>
             <p>{drill.title}</p>
             <div className="form-grid">
               <label className="field">
@@ -252,7 +255,7 @@ export default function TrainingHub({
                   min="1"
                   max="300"
                   name="minutes"
-                  defaultValue={drill.minutes}
+                  defaultValue={plannedMinutes ?? drill.minutes}
                   required
                 />
               </label>
@@ -271,9 +274,10 @@ export default function TrainingHub({
             <button className="button primary" type="submit">
               Save practice
             </button>
-          </form>
+          <ResetFormButton /></form>
         </Modal>
       )}
+    </div>
     </div>
   );
 }

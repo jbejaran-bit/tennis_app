@@ -1,20 +1,17 @@
 "use client";
+import { createRecordId } from "@/lib/baseline/record-id";
 import { ChangeEvent, useCallback, useEffect, useRef, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
-import { listVideos, LocalVideo, saveVideo } from "@/lib/baseline/videos";
+import { isVideoFile, listVideos, LocalVideo, saveVideo, videoFilename } from "@/lib/baseline/videos";
 import StrokeRecorder from "./StrokeRecorder";
 import Icon from "./Icons";
 import { dateLabel } from "@/lib/baseline/data";
-type CloudVideo = {
-  id: string;
-  lesson_title: string;
-  storage_url: string;
-  created_at: string;
-};
 function VideoCard({ video }: { video: LocalVideo }) {
   const [url, setUrl] = useState("");
   const [notes, setNotes] = useState(video.notes);
+  const [savedNotes,setSavedNotes]=useState(video.notes);
   const [status, setStatus] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [playbackError, setPlaybackError] = useState(false);
   const ref = useRef<HTMLVideoElement>(null);
   useEffect(() => {
     const u = URL.createObjectURL(video.blob);
@@ -22,11 +19,15 @@ function VideoCard({ video }: { video: LocalVideo }) {
     return () => URL.revokeObjectURL(u);
   }, [video.blob]);
   async function save() {
+    if (saving) return;
+    setSaving(true);
     try {
       await saveVideo({ ...video, notes });
-      setStatus("Notes saved.");
+      setSavedNotes(notes);setStatus("Notes saved.");
     } catch {
       setStatus("Could not save notes. Your clip is unchanged.");
+    } finally {
+      setSaving(false);
     }
   }
   return (
@@ -37,7 +38,11 @@ function VideoCard({ video }: { video: LocalVideo }) {
         controls
         playsInline
         preload="metadata"
+        aria-label={`Practice clip: ${video.title}`}
+        onError={() => setPlaybackError(true)}
+        onLoadedData={() => setPlaybackError(false)}
       />
+      {playbackError && <p className="notice" role="alert">This browser could not play this clip. Your saved file is unchanged. Download it to watch in your device’s video player, or upload an MP4 version.</p>}
       <div className="section-heading">
         <div>
           <h3>{video.title}</h3>
@@ -63,6 +68,7 @@ function VideoCard({ video }: { video: LocalVideo }) {
         Observation
         <textarea
           value={notes}
+          disabled={saving}
           onChange={(e) => {
             setNotes(e.target.value);
             setStatus("");
@@ -73,16 +79,14 @@ function VideoCard({ video }: { video: LocalVideo }) {
         />
       </label>
       <div className="button-row">
-        <button className="button" onClick={save}>
-          Save notes
+        <button className="button" onClick={save} disabled={saving}>
+          {saving ? "Saving notes…" : "Save notes"}
         </button>
+        <button className="text-button" disabled={saving || notes===savedNotes} onClick={()=>{setNotes(savedNotes);setStatus("Unsaved note edits reset.");}}>Reset note edits</button>
         <a
           className="text-button"
           href={url}
-          download={
-            video.title.replace(/[^\w -]/g, "") +
-            (video.blob.type.includes("mp4") ? ".mp4" : ".webm")
-          }
+          download={videoFilename(video)}
         >
           Download <Icon name="download" />
         </a>
@@ -97,69 +101,32 @@ function VideoCard({ video }: { video: LocalVideo }) {
 }
 export default function VideoGallery() {
   const [videos, setVideos] = useState<LocalVideo[]>([]);
-  const [cloud, setCloud] = useState<CloudVideo[]>([]);
   const [error, setError] = useState("");
-  const [cloudMessage, setCloudMessage] = useState("");
+  const [storageError, setStorageError] = useState("");
   const [busy, setBusy] = useState(false);
   const [record, setRecord] = useState(false);
   const [loading, setLoading] = useState(true);
   const load = useCallback(async () => {
+    setLoading(true);
     try {
       setVideos(await listVideos());
+      setStorageError("");
     } catch {
-      setError(
+      setStorageError(
         "Local video storage is unavailable. You can still record and download a clip.",
       );
     } finally {
       setLoading(false);
     }
   }, []);
-  const loadCloud = useCallback(async () => {
-    if (
-      !process.env.NEXT_PUBLIC_SUPABASE_URL ||
-      !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-    )
-      return;
-    setCloudMessage("Checking saved cloud clips…");
-    try {
-      const supabase = createClient();
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (!session) {
-        setCloudMessage("");
-        return;
-      }
-      const { data, error } = await supabase
-        .from("videos")
-        .select("id,lesson_title,storage_url,created_at")
-        .eq("user_id", session.user.id)
-        .order("created_at", { ascending: false })
-        .abortSignal(AbortSignal.timeout(8000));
-      if (error) throw error;
-      setCloud(
-        (data || []).filter(
-          (v) =>
-            typeof v.storage_url === "string" &&
-            v.storage_url.startsWith("https://"),
-        ),
-      );
-      setCloudMessage("");
-    } catch {
-      setCloudMessage(
-        "Cloud clips are unavailable right now. Your local journal still works.",
-      );
-    }
-  }, []);
   useEffect(() => {
     load();
-    loadCloud();
-  }, [load, loadCloud]);
+  }, [load]);
   async function add(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
     setError("");
-    if (!file.type.startsWith("video/")) {
+    if (!isVideoFile(file)) {
       setError("Choose a video file.");
       e.target.value = "";
       return;
@@ -172,7 +139,7 @@ export default function VideoGallery() {
     setBusy(true);
     try {
       await saveVideo({
-        id: crypto.randomUUID(),
+        id: createRecordId(),
         title: file.name.replace(/\.[^.]+$/, ""),
         blob: file,
         createdAt: new Date().toISOString(),
@@ -192,7 +159,7 @@ export default function VideoGallery() {
     <div className="video-hub">
       <section className="panel video-intro">
         <div>
-          <div className="eyebrow">WATCH. NOTICE. PRACTICE.</div>
+          <div className="eyebrow">Practice videos</div>
           <h2>Your video journal</h2>
           <p>
             Keep short practice clips, slow them down, and leave one useful
@@ -237,20 +204,13 @@ export default function VideoGallery() {
           {error}
         </p>
       )}
-      {cloudMessage && (
-        <div className="notice">
-          {cloudMessage}
-          <button className="text-button" onClick={loadCloud}>
-            Retry cloud clips
-          </button>
-        </div>
-      )}
+      {storageError && <div className="notice" role="alert"><p>{storageError}</p><button className="text-button" onClick={load} disabled={loading}>{loading ? "Opening storage…" : "Retry local storage"}</button></div>}
       {loading ? (
         <div className="panel empty-state">Opening your journal…</div>
-      ) : !videos.length && !cloud.length && !record ? (
+      ) : !storageError && !videos.length && !record ? (
         <div className="panel empty-state">
           <Icon name="video" />
-          <h3>One clip. One thing to improve.</h3>
+          <h3>Add your first practice clip.</h3>
           <p>
             Add a serve, rally, or footwork clip to begin. Your videos will
             appear here.
@@ -260,18 +220,6 @@ export default function VideoGallery() {
       <div className="video-grid">
         {videos.map((v) => (
           <VideoCard key={v.id} video={v} />
-        ))}
-        {cloud.map((v) => (
-          <article className="panel video-card" key={v.id}>
-            <video
-              src={v.storage_url}
-              controls
-              playsInline
-              preload="metadata"
-            />
-            <h3>{v.lesson_title || "Saved practice clip"}</h3>
-            <p>{dateLabel(v.created_at)} · Cloud recording</p>
-          </article>
         ))}
       </div>
     </div>
