@@ -1,47 +1,49 @@
-# Baseline — Your Game, in Focus
+# Baseline · Racket Lab
 
-A tennis workspace for racket customization, match reflection, deliberate practice and video review. Built with Next.js, React and TypeScript.
+Build, tune and compare tennis racket setups, then record how they feel on court. Baseline also includes a match log, training plans and a local video journal.
+
+[Open the production demo](https://tennis-app-phi.vercel.app/dashboard). The production URL can show the previous release until the pending changes are promoted.
+
+The **Racket Lab screenshots** GitHub Actions run attaches a `racket-lab-screenshots` artifact with desktop and mobile PNGs from the production build.
+
+## Features
+
+- Estimate weight, balance and swingweight after adding mass.
+- Save and compare setups, review sourced pro references and log court tests.
+- Track matches and practice, plan training sessions and keep local video clips.
+- Export or import JSON backups. Download video clips separately from the journal.
 
 ## Run locally
+
+Use Node.js 24 and npm. The app requires no account or environment variables.
 
 ```sh
 npm ci
 npm run dev
 ```
 
-The dashboard and landing page work without an account. For the existing Supabase sign-in and cloud recordings, configure `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` in `.env.local`. The app builds without these values; authentication requires a configured Supabase project. Never commit secrets.
+Open [localhost:3000](http://localhost:3000). To validate a change, run `npm test`, `npm run typecheck` and `npm run build`.
 
-## What works
+## Technology and data
 
-- **Overview:** real logged match totals, recent form, practice minutes, most recently saved setup and quick actions.
-- **Racket Lab:** editable starting weight, balance, length and optional swingweight; added mass at racket locations; string and grip additions; setup saving, copying, comparison and export.
-- **Match log:** add/edit matches with optional stats, search/filter, notes, equipment and next-practice focus. Original sample matches are preserved but excluded from personal totals. No fabricated AI diagnosis.
-- **Training and playbook:** solo, wall and partner drills with targets, session structure, practice journal and written tactical guides.
-- **Video journal:** add clips up to 150 MB, local recording, slow playback, notes and downloads. Authenticated existing cloud clips are queried by user and have a retry state.
-- **Backup:** export/import matches, practice sessions and setups as versioned JSON. Import merges by ID and keeps existing entries. Videos are downloaded separately.
+Next.js App Router, React, TypeScript and CSS/Tailwind. Records stay in browser storage. Video clips use IndexedDB. See [architecture](ARCHITECTURE.md) for the data flow and [changelog](CHANGELOG.md) for release notes.
 
-## Storage and estimates
+| Player | Report year | Source |
+| --- | --- | --- |
+| Carlos Alcaraz | 2025 | [Tennisnerd](https://www.tennisnerd.net/gear/racquets/pro-player-racquets/carlos-alcaraz-racquet/26903) |
+| Roger Federer | 2018 | [Tennisnerd](https://www.tennisnerd.net/gear/racquets/pro-player-racquets/roger-federers-racquet-2/3065) |
+| Novak Djokovic | 2022 | [Tennisnerd](https://www.tennisnerd.net/gear/racquets/pro-player-racquets/does-the-best-player-use-the-best-racquet/27743) |
+| Rafael Nadal | 2026 | [Tennisnerd](https://www.tennisnerd.net/gear/racquets/pro-player-racquets/rafa-nadals-racquet-player-profile/66028) |
+| Jannik Sinner | 2026 | [Tennisnerd](https://www.tennisnerd.net/gear/racquets/pro-player-racquets/jannik-sinners-racquet/23204) |
+| Aryna Sabalenka | 2026 | [Tennisnerd](https://www.tennisnerd.net/gear/racquets/pro-player-racquets/aryna-sabalenkas-racquet/24697) |
 
-Logs and setups use browser localStorage. Videos use IndexedDB. These are device/browser-specific, not account-synchronized. Cloud recordings remain accessible to their signed-in owner when Supabase is available. Export backups before clearing browser data.
+The table uses report years. Playing seasons and specifications are not independently verified. Baseline has no affiliation with any brand. The [Tennis Warehouse University customization worksheet](https://twu.tennis-warehouse.com/learning_center/customizationReverse.php) describes the point mass approach used for customization estimates.
 
-Racket catalog weights and balances are editable **unstrung starter estimates** retained from the original app; check the exact model/year and your own frame. The calculator uses center-of-mass balance and point-mass swingweight additions around a 10 cm axis. For unknown starting swingweight, only the change is reported. Never mix a strung swingweight with unstrung weight/balance. String and grip distributions are approximations, not machine measurements. See [Tennis Warehouse University's customization worksheet](https://twu.tennis-warehouse.com/learning_center/customizationReverse.php).
+## Limitations
 
-## Checks
+- Estimates depend on your starting measurements and where you place the added mass. Unknown starting swingweight stays unknown. Differences between strung and unstrung setups are hidden.
+- Data stays in the current browser and site origin. Clearing site data removes it. Backups do not include video files or synchronize between devices.
+- Setup links include the name and specs. Anyone with a link can read that information.
+- Video playback and recording depend on browser support.
 
-```sh
-npm test
-npm run typecheck
-npm run build
-```
-
-Tests cover mass/balance calculations, swingweight units and axis, unknown baselines, custom lengths, stat validation, missing values and exclusion of legacy sample matches.
-
-## Progress and sharing
-
-Progress shows 28- and 84-day windows, seven-day practice totals, surface results, and recent match reflections. Sample matches, future entries, and unknown serve statistics are excluded as appropriate. Percentages are descriptive; serve averages are unweighted across recorded matches.
-
-Racket Lab can copy a shareable configuration link. Only known specification fields, the setup name, strings, and tension are included; court notes and local record IDs are excluded. Opening a link shows a preview and requires loading it explicitly. Saved setups remain intact. Links contain their configuration in the URL fragment and do not require an account or a backend record.
-
-## Saved records
-
-The Saved data page offers searchable active/archive views for matches, practice sessions and racket setups. Archive is reversible: records retain their original content and stay in JSON backups. Archived entries are excluded from dashboard and Progress totals, the match log, practice journal and active racket selectors. Practice dates, duration and notes can be edited. Older backups without an archive flag remain supported.
+[MIT License](LICENSE)

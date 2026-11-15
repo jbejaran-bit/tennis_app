@@ -503,11 +503,16 @@ test('Dragging from a dialog field onto its backdrop does not close it; a delibe
  await act(async()=>{dialog.dispatchEvent(new dom.window.Event('pointerdown',{bubbles:true}));dialog.click();});assert.equal(closed,1);
  }finally{await close();}
 });
-test('Legacy account pages provide a working workspace entry when separate account services are absent',async()=>{
- const url=process.env.NEXT_PUBLIC_SUPABASE_URL,key=process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;delete process.env.NEXT_PUBLIC_SUPABASE_URL;delete process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
- try{for(const path of ['app/auth/login/page.tsx','app/auth/register/page.tsx']){
- const Page=load(path).default;root=createRoot(container);await act(async()=>root.render(React.createElement(Page)));assert.equal(container.querySelector('form'),null);assert.equal(container.querySelector('a').getAttribute('href'),'/dashboard');assert.match(container.textContent,/Open Baseline/);await close();
- }}finally{if(url!==undefined)process.env.NEXT_PUBLIC_SUPABASE_URL=url;if(key!==undefined)process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY=key;}
+test('Legacy account pages still link to the workspace',async()=>{
+ for(const path of ['app/auth/login/page.tsx','app/auth/register/page.tsx']){
+  const Page=load(path).default;
+  root=createRoot(container);
+  try{
+   await act(async()=>root.render(React.createElement(Page)));
+   assert.equal(container.querySelector('form'),null);
+   assert.equal(container.querySelector('a').getAttribute('href'),'/dashboard');
+  }finally{await close();}
+ }
 });
 
 test('Mobile menu reaches secondary pages and quick match opens the actual match form',async()=>{
