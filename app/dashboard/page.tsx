@@ -346,6 +346,21 @@ export default function DashboardPage() {
               </button>
             )}
           </div>
+          {active === "racquet-lab" && (
+            <section className="panel racket-data-controls" aria-label="Browser data and backups">
+              <p>Your setups, logs and clips are saved only in this browser. Export a backup to move your records to another device. Download video clips separately.</p>
+              <div className="button-row">
+                <button className="button" onClick={exportBackup}
+                  disabled={!matches.ready || !sessions.ready || !setups.ready || !racketTrials.ready || !matchDay.ready || !sessionPlan.ready}>
+                  Export backup
+                </button>
+                <label className="button file-button">
+                  Import backup
+                  <input type="file" accept="application/json,.json" aria-label="Import racket workspace backup" onChange={importBackup} />
+                </label>
+              </div>
+            </section>
+          )}
           {(notice || matches.error || sessions.error || setups.error || racketTrials.error || matchDay.error || sessionPlan.error) && (
             <p className="notice" role="status">
               {notice || matches.error || sessions.error || setups.error || racketTrials.error || matchDay.error || sessionPlan.error}

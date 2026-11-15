@@ -20,10 +20,20 @@ export default function ProRacketComparison({draft,saved,onBuild,selection,onSel
    <div className="pro-browse-fields"><label className="field">Report year<select value={year} onChange={e=>{const year=e.target.value;const visible=PRO_SPECS.filter(p=>!year || p.reportYear===Number(year));change({year,proId:visible.find(p=>p.id===pro.id)?.id || visible[0].id,section:'specs'});}}><option value="">All report years</option>{years.map(y=><option key={y} value={y}>{y}</option>)}</select></label><label className="field">Your comparison racket<select value={saved.some(s=>s.id===ownId)?ownId:''} onChange={e=>change({ownId:e.target.value})}><option value="">Current draft</option>{saved.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></label></div>
    <label className="field pro-player-select">Player & report<select value={pro.id} onChange={e=>change({proId:e.target.value})}>{reports.map(p=><option key={p.id} value={p.id}>{p.player} · {p.reportYear} · {p.condition}</option>)}</select></label>
    <div className="pro-player-grid" aria-label="Choose a player">{reports.map(p=><button key={p.id} aria-pressed={p.id===pro.id} onClick={()=>change({proId:p.id})}><span className="pro-player-initial" aria-hidden="true">{p.player.split(' ').map(n=>n[0]).join('')}</span><span><b>{p.player}</b><small>{p.reportYear} report · {p.condition}</small></span></button>)}</div>
+   <p className="pro-year-note">No affiliation with any brand. Specifications are reference values and may differ from your racket.</p>
+   <details className="method-note">
+    <summary>All player reports and sources</summary>
+    <ul className="pro-source-list">
+     {PRO_SPECS.map(report => <li key={report.id}>
+      <strong>{report.player}</strong> · {report.model} · {report.reportYear} report · {report.condition}
+      <br /><a href={report.url} target="_blank" rel="noreferrer">Tennisnerd source</a> · Not independently verified
+     </li>)}
+    </ul>
+   </details>
    <p className="pro-year-note">Report year is the source date, not a confirmed playing season. Each profile explains what is known.</p>
   </div>
   <article className="panel pro-profile" key={pro.id}>
-   <div className="pro-profile-heading"><div><div className="eyebrow">{pro.reportYear} REPORT · {pro.evidence}</div><h2>{pro.player}</h2><p>{pro.model}</p></div><span className="badge">{pro.condition.toUpperCase()} REFERENCE</span></div>
+   <div className="pro-profile-heading"><div><div className="eyebrow">{pro.reportYear} REPORT · {pro.evidence} · NOT INDEPENDENTLY VERIFIED</div><h2>{pro.player}</h2><p>{pro.model}</p></div><span className="badge">{pro.condition.toUpperCase()} REFERENCE</span></div>
    <p className="helper pro-era">{pro.era}</p>
    <nav className="pro-section-nav" aria-label="Pro reference sections">{[['specs','Compare specs'],['strings','Strings & context'],['sources','Source & year']].map(([id,label])=><button className="button" key={id} aria-pressed={section===id} onClick={()=>change({section:id})}>{label}</button>)}</nav>
    {section==='specs' && <div>
