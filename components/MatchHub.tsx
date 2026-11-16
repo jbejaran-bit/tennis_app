@@ -1,4 +1,6 @@
 "use client";
+import { createRecordId } from "@/lib/baseline/record-id";
+import ResetFormButton from "./ResetFormButton";
 import { FormEvent, useState } from "react";
 import {
   Match,
@@ -8,34 +10,46 @@ import {
   isLegacyDemo,
   suggestedDrill,
   drills,
+  isMatch,
 } from "@/lib/baseline/data";
-import { Setup } from "@/lib/baseline/racquet";
+import { Setup, finalCondition, setupDescription } from "@/lib/baseline/racquet";
 import Modal from "./Modal";
 import Icon from "./Icons";
 import OpponentHistory from "./OpponentHistory";
+import RecordedSetup from "./RecordedSetup";
 export function MatchForm({
   initial,
   setups = [],
+  preferredSetupId = "",
   error,
   onSave,
   onClose,
 }: {
   initial?: Match;
   setups?: Setup[];
+  preferredSetupId?: string;
   error?: string;
   onSave: (m: Match) => void;
   onClose: () => void;
 }) {
   const [validationError, setValidationError] = useState("");
+  const eligible=setups.filter(s=>!!s.id && !s.archived && finalCondition(s)==="strung");
+  const [equipmentId,setEquipmentId]=useState(initial?.setupSnapshot ? "recorded" : initial ? "" : eligible.some(s=>s.id===preferredSetupId) ? "saved:"+preferredSetupId : "");
+  const [manualSetup,setManualSetup]=useState(initial?.setup || "");
+  const snapshot=equipmentId==="recorded" ? initial?.setupSnapshot : eligible.find(s=>"saved:"+s.id===equipmentId);
+  const equipmentLabel=snapshot ? equipmentId==="recorded" && initial?.setup ? initial.setup : setupDescription(snapshot) : manualSetup;
   function save(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const f = new FormData(e.currentTarget);
     if (!String(f.get("opponent")).trim() || !String(f.get("score")).trim()) { setValidationError("Enter an opponent and score before saving."); return; }
     setValidationError("");
-    const optional = (k: string) =>
-      String(f.get(k)).trim() === "" ? null : Number(f.get(k));
-    onSave({
-      id: initial?.id || crypto.randomUUID(),
+    const optional = (k: string) => {
+      const raw=f.get(k);
+      return raw===null || String(raw).trim()==="" ? null : Number(raw);
+    };
+    if(equipmentId && !snapshot) {setValidationError("The selected setup is no longer active. Choose another setup or use a manual record.");return;}
+    const item:Match={
+      id: initial?.id || createRecordId(),
       opponent: String(f.get("opponent")).trim(),
       score: String(f.get("score")).trim(),
       surface: String(f.get("surface")),
@@ -47,11 +61,14 @@ export function MatchForm({
       notes: String(f.get("notes")),
       focus: String(f.get("focus")),
       setup: String(f.get("setup")),
-    });
+      setupSnapshot: snapshot ? {...snapshot} : undefined,
+    };
+    if(!isMatch(item) || item.date>today()) {setValidationError("Check the date and optional stats before saving. Dates cannot be in the future.");return;}
+    onSave(item);
   }
   return (
     <Modal title={initial ? "Edit match" : "Log a match"} onClose={onClose}>
-      <form className="form-stack" onSubmit={save}>
+      <form className="form-stack" onSubmit={save} onReset={()=>{setValidationError("");setEquipmentId(initial?.setupSnapshot ? "recorded" : initial ? "" : eligible.some(s=>s.id===preferredSetupId) ? "saved:"+preferredSetupId : "");setManualSetup(initial?.setup || "");}}>
         <div className="form-grid">
           <label className="field">
             Opponent
@@ -61,7 +78,7 @@ export function MatchForm({
               maxLength={100}
               defaultValue={initial?.opponent}
               placeholder="Opponent name"
-              autoFocus
+              data-autofocus="true"
             />
           </label>
           <label className="field">
@@ -145,17 +162,6 @@ export function MatchForm({
             />
           </label>
           <label className="field">
-            Racket / string setup
-            <input
-              list="saved-racket-setups"
-              name="setup"
-              defaultValue={initial?.setup}
-              maxLength={150}
-              placeholder="Which setup did you use?"
-            />
-          </label>
-          <datalist id="saved-racket-setups">{setups.map(s => <option key={s.id} value={`${s.name}${s.stringName ? " · " + s.stringName : ""}${s.tension ? " · " + s.tension : ""}`} />)}</datalist>
-          <label className="field">
             Next practice focus
             <input
               name="focus"
@@ -165,6 +171,10 @@ export function MatchForm({
             />
           </label>
         </div>
+        <div className="form-divider">Equipment used in this match</div>
+        <label className="field">Saved racket setup<select value={equipmentId} onChange={e=>{if(e.target.value==="")setManualSetup(equipmentLabel);setEquipmentId(e.target.value);}}><option value="">Manual / not recorded</option>{initial?.setupSnapshot && <option value="recorded">Recorded setup · original specifications</option>}{eligible.map(s=><option key={s.id} value={"saved:"+s.id}>{s.name}{s.id===preferredSetupId ? " · match-day choice" : ""}</option>)}</select><small>Saved strung setups capture their specifications. Manual entries keep only the text you enter.</small></label>
+        <label className="field">Racket / string setup<input name="setup" value={equipmentLabel} readOnly={!!snapshot} onChange={e=>setManualSetup(e.target.value)} maxLength={250} placeholder="Which racket, strings and tension did you use?" /></label>
+        {snapshot && <RecordedSetup setup={snapshot} recorded={equipmentId==="recorded"} />}
         <label className="field">
           Match notes
           <textarea
@@ -184,7 +194,7 @@ export function MatchForm({
             Cancel
           </button>
         </div>
-      </form>
+      <ResetFormButton /></form>
     </Modal>
   );
 }
@@ -193,19 +203,28 @@ export default function MatchHub({
   onLog,
   onEdit,
   onPractice,
+  onReviewSetup,
+  initialSelectedId="",
+  onSelectMatch,
 }: {
   matches: Match[];
   onLog: () => void;
   onEdit: (m: Match) => void;
   onPractice: (id: string) => void;
+  onReviewSetup?: (s:Setup) => void;
+  initialSelectedId?:string;
+  onSelectMatch?: (id:string)=>void;
 }) {
-  const [selected, setSelected] = useState("");
+  const [selected, setSelected] = useState(initialSelectedId);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("all");
+  const [equipmentFilter,setEquipmentFilter] = useState("");
+  const equipmentOptions=Array.from(new Map(matches.filter(m=>m.setupSnapshot?.id).map(m=>[m.setupSnapshot!.id,m.setupSnapshot!.name])).entries());
   const visible = matches
     .filter(
       (m) =>
         m.opponent.toLowerCase().includes(query.toLowerCase()) &&
+        (!equipmentFilter || m.setupSnapshot?.id===equipmentFilter) &&
         (filter === "all" || m.result === filter),
     )
     .sort((a, b) => b.date.localeCompare(a.date));
@@ -214,7 +233,7 @@ export default function MatchHub({
     <div className="match-layout">
       <section className="panel match-log">
         <div className="section-heading">
-          <h2>Your match log</h2>
+          <h2>Your match log</h2><button className="text-button" onClick={()=>{setQuery("");setFilter("all");setEquipmentFilter("");}}>Reset match filters</button>
           <button className="button primary" onClick={onLog}>
             <Icon name="plus" />
             Log match
@@ -242,6 +261,7 @@ export default function MatchHub({
             <option value="win">Wins</option>
             <option value="loss">Losses</option>
           </select>
+          {equipmentOptions.length>0 && <><label className="sr-only" htmlFor="match-equipment-filter">Filter by recorded racket setup</label><select id="match-equipment-filter" value={equipmentFilter} onChange={e=>setEquipmentFilter(e.target.value)}><option value="">All setups</option>{equipmentOptions.map(([id,name])=><option key={id} value={id}>{name}</option>)}</select></>}
         </div>
         {!visible.length ? (
           <div className="empty-state">
@@ -253,7 +273,7 @@ export default function MatchHub({
             </h3>
             <p>
               {matches.length
-                ? "Try another opponent or result filter."
+                ? "Try another opponent, result or equipment filter."
                 : "Log a match to build a picture of your game. Only track the stats you actually know."}
             </p>
             {!matches.length && (
@@ -268,7 +288,8 @@ export default function MatchHub({
               <button
                 key={m.id}
                 className={`match-row ${active?.id === m.id ? "active" : ""}`}
-                onClick={() => setSelected(m.id)}
+                onClick={() => {setSelected(m.id);onSelectMatch?.(m.id);}}
+                aria-pressed={active?.id===m.id}
               >
                 <span className={`result-mark ${m.result}`}>
                   {m.result === "win" ? "W" : "L"}
@@ -291,7 +312,7 @@ export default function MatchHub({
         {active ? (
           <>
             <div className="section-heading">
-              <div className="eyebrow">MATCH REFLECTION</div>
+              <div className="eyebrow">Match notes</div>
               <button className="text-button" onClick={() => onEdit(active)}>
                 Edit
               </button>
@@ -318,13 +339,13 @@ export default function MatchHub({
                 <span>Unforced errors</span>
               </div>
             </div>
-            {!isLegacyDemo(active) && <OpponentHistory matches={matches} active={active} onSelect={id => { setFilter("all"); setQuery(""); setSelected(id); }} />}
+            {!isLegacyDemo(active) && <OpponentHistory matches={matches} active={active} onSelect={id => { setFilter("all"); setEquipmentFilter(""); setQuery(""); setSelected(id);onSelectMatch?.(id); }} />}
             <h4>Your match notes</h4>
             <p className="preserve-lines">
               {active.notes ||
                 "No notes yet. Add the patterns you noticed while they are fresh."}
             </p>
-            {active.setup && (
+            {active.setupSnapshot ? <RecordedSetup setup={active.setupSnapshot} recorded onReview={onReviewSetup} /> : active.setup && (
               <div className="focus-note">
                 <span>SETUP USED</span>
                 <p>{active.setup}</p>
@@ -357,7 +378,7 @@ export default function MatchHub({
           </>
         ) : (
           <div className="empty-state">
-            <h3>A clearer next step</h3>
+            <h3>What to work on next</h3>
             <p>
               Select a match to review your notes and choose a practice focus.
             </p>

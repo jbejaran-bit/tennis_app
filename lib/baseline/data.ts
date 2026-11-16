@@ -1,3 +1,4 @@
+import { Setup, isSetup, finalCondition } from "./racquet";
 export type Match = {
   archived?: boolean;
   id: string;
@@ -12,6 +13,7 @@ export type Match = {
   notes?: string;
   focus?: string;
   setup?: string;
+  setupSnapshot?: Setup;
 };
 export const surfaces: Record<string, string> = {
   hard: "Hard",
@@ -54,9 +56,10 @@ export function isMatch(value: unknown): value is Match {
     v.opponent.trim().length > 0 &&
     typeof v.score === "string" &&
     typeof v.style === "string" &&
-    ["notes", "focus", "setup"].every(
+    (["notes", "focus", "setup"] as const).every(
       (k) => v[k] === undefined || typeof v[k] === "string",
     ) &&
+    (v.setupSnapshot === undefined || isSetup(v.setupSnapshot) && finalCondition(v.setupSnapshot) === "strung") &&
     ["win", "loss"].includes(v.result) &&
     typeof v.surface === "string" &&
     Object.hasOwn(surfaces, v.surface) &&
@@ -108,6 +111,11 @@ export function downloadJson(name: string, value: unknown) {
   a.download = name;
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+export function downloadText(name:string,text:string) {
+  const url=URL.createObjectURL(new Blob([text],{type:"text/plain;charset=utf-8"}));
+  try {const a=document.createElement("a");a.href=url;a.download=name;a.click();}
+  finally {setTimeout(()=>URL.revokeObjectURL(url),1000);}
 }
 export const drills = [
   {

@@ -1,0 +1,45 @@
+name: Racket Lab screenshots
+on:
+  pull_request:
+    paths:
+      - 'app/**'
+      - 'components/**'
+      - 'lib/**'
+      - 'scripts/capture-racket-lab.cjs'
+      - '.github/workflows/screenshots.yml'
+      - 'package-lock.json'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  capture:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npx playwright install --with-deps chromium
+      - run: npm run build
+      - name: Capture production build
+        run: |
+          npm start -- --hostname 127.0.0.1 --port 3147 > /tmp/racket-lab.log 2>&1 &
+          server=$!
+          trap 'kill "$server" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 45); do
+            if curl --fail --silent --output /dev/null http://127.0.0.1:3147/dashboard; then
+              node scripts/capture-racket-lab.cjs
+              exit
+            fi
+            sleep 1
+          done
+          cat /tmp/racket-lab.log
+          exit 1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: racket-lab-screenshots
+          path: docs/screenshots/*.png
+          if-no-files-found: error

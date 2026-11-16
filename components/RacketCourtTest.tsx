@@ -1,0 +1,54 @@
+"use client";
+import { createRecordId } from "@/lib/baseline/record-id";
+import ResetFormButton from "./ResetFormButton";
+import { FormEvent, useEffect, useState } from "react";
+import { Setup, RacketTrial, TRIAL_METRICS, isRacketTrial, validRacketTrials, calculateSetup, finalCondition, TRIAL_LABELS,CourtFeedbackFocus,isSetup } from "@/lib/baseline/racquet";
+import { today, surfaces, dateLabel } from "@/lib/baseline/data";
+import { useLocalData } from "@/lib/baseline/useLocalData";
+import { setArchived } from "@/lib/baseline/storage";
+import CourtTestComparison from "./CourtTestComparison";
+
+
+export default function RacketCourtTest({setup,onLoad,feedbackFocus}: {setup:Setup;onLoad:(s:Setup)=>void;feedbackFocus?:CourtFeedbackFocus|null}) {
+  const trials = useLocalData<RacketTrial[]>("baseline_racket_trials_v1",[],validRacketTrials);
+  const [editing,setEditing] = useState<RacketTrial | null>(null);
+  const [message,setMessage] = useState("");
+  const [archiveView,setArchiveView] = useState(false);
+  const [sameFrame,setSameFrame] = useState(false);
+  const [courtView,setCourtView] = useState<"record"|"compare">(feedbackFocus ? "compare" : "record");
+  useEffect(()=>{setCourtView(feedbackFocus ? "compare" : "record");},[feedbackFocus]);
+  useEffect(()=>{if(feedbackFocus && courtView==="compare"){const heading=document.getElementById("court-feedback-heading");heading?.focus({preventScroll:true});heading?.scrollIntoView({behavior:window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth",block:"start"});}},[feedbackFocus,courtView]);
+  useEffect(()=>{if(editing){const editor=document.getElementById("court-feedback-editor");editor?.focus({preventScroll:true});editor?.scrollIntoView({behavior:window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth",block:"start"});}},[editing]);
+  const testSetup=editing?.setup || setup;
+  const valid=isSetup(testSetup);
+  const result=valid ? calculateSetup(testSetup) : null;
+  const strung=valid && finalCondition(testSetup)==="strung";
+  const visible=trials.value.filter(t => !!t.archived===archiveView && (!sameFrame || t.setup.model===setup.model)).sort((a,b)=>b.date.localeCompare(a.date));
+  function submit(e:FormEvent<HTMLFormElement>) {
+    e.preventDefault(); const f=new FormData(e.currentTarget);
+    const ratings = Object.fromEntries(TRIAL_METRICS.map(k => [k, f.get(k)===null || f.get(k)==="" ? null : Number(f.get(k))])) as RacketTrial["ratings"];
+    const item:RacketTrial={id:editing?.id || createRecordId(),date:String(f.get("date")),minutes:Number(f.get("minutes")),surface:String(f.get("surface")),stringHours:f.get("stringHours")===null || f.get("stringHours")==="" ? null : Number(f.get("stringHours")),decision:String(f.get("decision")) as RacketTrial["decision"],ratings,notes:String(f.get("notes")),setup:{...testSetup},archived:editing?.archived || false};
+    if(!isRacketTrial(item) || item.date>today() || !item.setup.name.trim() || (!item.notes.trim() && TRIAL_METRICS.every(k=>ratings[k]===null))) {setMessage("Use a valid past or current date, name the draft, and add at least one rating or a note.");return;}
+    if(trials.save(current=> editing ? current.map(t=>t.id===item.id ? {...item,archived:t.archived} : t) : [item,...current])) {setEditing(null);e.currentTarget.reset();setMessage("Court test saved with a snapshot of the tested setup. Later setup edits will not change it.");}
+  }
+  return <div className="court-test-workspace">
+    <nav className="court-view-switch" aria-label="Court-test workspace"><button className={courtView==="record" ? "selected" : ""} aria-pressed={courtView==="record"} onClick={()=>setCourtView("record")}>Record & history</button><button className={courtView==="compare" ? "selected" : ""} aria-pressed={courtView==="compare"} onClick={()=>setCourtView("compare")}>Compare feedback</button></nav>
+    {trials.error && <p className="notice" role="alert">{trials.error}</p>}
+    <div hidden={courtView!=="compare"} className="court-feedback-view"><CourtTestComparison trials={trials.value} draft={setup} onLoad={onLoad} onRecord={()=>setCourtView("record")} focus={feedbackFocus} /></div>
+    <div hidden={courtView!=="record"} className="court-record-view">
+    <section className="panel court-protocol"><div className="eyebrow">ON COURT / CLOSE THE LOOP</div><h2>Let your game make the call.</h2><p>Compare under similar conditions. Change one variable, alternate setups, and repeat before making a final decision.</p><ol><li><b>Groundstrokes · 10 min</b><span>Use the same depth target. Track timing and off-center contact.</span></li><li><b>Serve + return · 10 min</b><span>Use the same balls and targets. Notice pace, placement and late contact.</span></li><li><b>Points · 10 min</b><span>Check whether the change still works under pressure and fatigue.</span></li></ol><p className="helper">Ratings are your subjective feedback. String age, balls, surface and fatigue can change the comparison. Stop the session if a setup causes discomfort.</p></section>
+    <section className="panel" id="court-feedback-editor" tabIndex={-1}><div className="section-heading"><h3>{editing ? 'Edit court feedback' : 'Record a court test'}</h3><span className="badge">SETUP SNAPSHOT</span></div><div className="test-snapshot"><b>{testSetup.name || 'Name your draft in Build'}</b><span>{result ? <>{result.weight.toFixed(1)} g · {result.balance.toFixed(2)} cm · {result.swingweight===null ? 'SW unknown' : result.swingweight.toFixed(1)+' SW'}</> : 'Draft inputs need correction in Build'}</span><small>{testSetup.stringName || 'Strings not recorded'} · {testSetup.tension || 'Tension not recorded'}</small></div>
+    {!valid ? <p className="notice" role="status">Correct the draft specifications in Build before recording a new test. Saved feedback and test history are still available.</p> : !strung && <p className="notice" role="status">This draft is unstrung. Add string mass or use a measured strung starting racket in Build before recording a court test.</p>}
+    <form key={editing?.id || 'new'} className="form-stack" onSubmit={submit} onReset={()=>{setMessage("");}}>
+      <div className="form-grid three"><label className="field">Test date<input type="date" name="date" required max={today()} defaultValue={editing?.date || today()} /></label><label className="field">Minutes on court<input type="number" name="minutes" required min="1" max="300" step="1" defaultValue={editing?.minutes || 30} /></label><label className="field">Surface<select name="surface" defaultValue={editing?.surface || 'hard'}>{Object.entries(surfaces).map(([k,v])=><option value={k} key={k}>{v}</option>)}</select></label></div>
+      <div className="court-ratings">{TRIAL_METRICS.map(k=><label className="field" key={k}>{TRIAL_LABELS[k]}<select name={k} defaultValue={editing?.ratings[k] ?? ''}><option value="">Not assessed</option>{[1,2,3,4,5].map(n=><option value={n} key={n}>{n} / 5 {n===1 ? '· Poor' : n===3 ? '· Neutral' : n===5 ? '· Excellent' : ''}</option>)}</select></label>)}</div>
+      <div className="form-grid"><label className="field">Hours on strings (optional)<input name="stringHours" type="number" min="0" max="1000" step="0.5" defaultValue={editing?.stringHours ?? ''} placeholder="e.g. 6" /></label><label className="field">Next decision<select name="decision" defaultValue={editing?.decision || 'retest'}><option value="retest">Test again</option><option value="keep">Keep this setup</option><option value="revert">Return to previous setup</option></select></label></div>
+      <label className="field">What changed? What will you test next?<textarea name="notes" maxLength={2000} rows={3} defaultValue={editing?.notes || ''} placeholder="Backhand returns felt steadier, but timing was late after 30 minutes. Try 1 g less at 12 next time." /></label>
+      <div className="button-row"><button className="button primary" disabled={!trials.ready || !!trials.error || !strung} type="submit">{editing ? 'Update court test' : 'Save court test'}</button>{editing && <button className="button" type="button" onClick={()=>{setEditing(null);setMessage('');}}>Cancel edit</button>}</div>
+    <ResetFormButton /></form>{message && <p className="notice" role="status">{message}</p>}</section>
+    <section className="panel"><div className="section-heading"><h3>Test history</h3><span className="badge">{visible.length} TESTS</span></div><div className="filter-row"><button className={`filter-chip ${!archiveView ? 'selected' : ''}`} aria-pressed={!archiveView} onClick={()=>setArchiveView(false)}>Active</button><button className={`filter-chip ${archiveView ? 'selected' : ''}`} aria-pressed={archiveView} onClick={()=>setArchiveView(true)}>Archived</button><button className={`filter-chip ${sameFrame ? 'selected' : ''}`} aria-pressed={sameFrame} onClick={()=>setSameFrame(!sameFrame)}>This model only</button></div>
+    {!visible.length ? <div className="empty-state"><h3>{archiveView ? 'No archived tests' : 'Your first decision starts on court.'}</h3><p>{archiveView ? 'Archived tests stay in your backup and can be restored here.' : 'Log a session above to connect specification changes with actual feedback.'}</p></div> : <div className="trial-history">{visible.map(t=>{const r=calculateSetup(t.setup); return <article className="trial-card" key={t.id}><div className="section-heading"><div><div className="eyebrow">{dateLabel(t.date)} · {surfaces[t.surface]} · {t.minutes} MIN</div><h3>{t.setup.name}</h3></div><span className="badge">{t.decision==='keep' ? 'KEEP' : t.decision==='revert' ? 'REVERT' : 'TEST AGAIN'}</span></div><p className="helper">{r.weight.toFixed(1)} g · {r.balance.toFixed(2)} cm · {r.swingweight===null ? 'SW unknown' : r.swingweight.toFixed(1)+' SW'} · {t.setup.stringName || 'Strings not recorded'} · {t.setup.tension || 'Tension not recorded'}{t.stringHours!==null ? ` · ${t.stringHours} h on strings` : ''}</p><div className="trial-rating-row">{TRIAL_METRICS.map(k=><span key={k}>{TRIAL_LABELS[k]} <b>{t.ratings[k]===null ? '—' : t.ratings[k]+'/5'}</b></span>)}</div>{t.notes && <p className="trial-notes">{t.notes}</p>}<div className="button-row"><button className="button" onClick={()=>{onLoad({...t.setup,id:'',archived:false,name:t.setup.name.slice(0,70)+' retest'});}}>Load tested specs</button>{!t.archived && <button className="button" onClick={()=>{setEditing(t);setMessage('Editing feedback. The original setup snapshot is preserved.');}}>Edit feedback</button>}<button className="text-button" onClick={()=>{if(trials.save(current=>setArchived(current,t.id,!t.archived))) {if(editing?.id===t.id) setEditing(null);setMessage(t.archived ? 'Test restored.' : 'Test archived. Open Archived to restore it.');}}}>{t.archived ? 'Restore' : 'Archive'}</button></div></article>;})}</div>}
+    </section>
+    </div>
+  </div>;
+}
